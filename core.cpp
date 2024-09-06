@@ -763,7 +763,7 @@ std::optional<unsigned int> Track::DoModulationEnvelope()
 
 	if (modulation_index != 0)
 	{
-		const signed char* const envelope = modulation_envelopes[modulation_index];
+		const signed char* const envelope = modulation_envelopes[modulation_index - 1];
 
 		for (;;)
 		{
@@ -1553,15 +1553,17 @@ static void Sound_PlayBGM(const unsigned int id)
 	const unsigned char* const header = music.data;
 	state.variables.speeduptempo = music.speed_up_tempo;
 
-	if (music.same_tempo_on_pal)
+	if (music.slower_tempo_on_pal)
 		state.variables.force_pal_tempo = true;
 
-	const Voice *voices = reinterpret_cast<const Voice*>(&header[ReadAlignedSignedWord(&header[0])]);
-
+	const auto voice_offset = ReadAlignedSignedWord(&header[0]);
+	const Voice* const voices =
 #ifdef SMPS_EnableUniversalVoiceBank
-	if (voices == nullptr)
-		voices = data.universal_voice_bank;
+		voice_offset == 0
+		? &data->universal_voice_bank
+		:
 #endif
+		reinterpret_cast<const Voice*>(&header[voice_offset]);
 
 	const unsigned int total_dac_and_fm_tracks = header[2];
 	const unsigned int total_psg_tracks = header[3];

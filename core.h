@@ -14,6 +14,7 @@
 #define SMPS_EnableSpinDashSFX
 #define SMPS_PushSFXBehaviour
 #define SMPS_EnableContSFX
+#define SMPS_EnableUniversalVoiceBank
 #define SMPS_Asserts
 
 namespace SMPS
@@ -335,7 +336,7 @@ namespace SMPS
 	{
 		const unsigned char *data;
 		unsigned char speed_up_tempo;
-		bool same_tempo_on_pal : 1;
+		bool slower_tempo_on_pal : 1;
 		bool extra_life_jingle : 1;
 	};
 
