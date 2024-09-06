@@ -2,9 +2,7 @@
 
 #include <algorithm>
 #include <array>
-#ifdef SMPS_Asserts
-	#include <cassert>
-#endif
+#include <cassert>
 #include <optional>
 
 using namespace SMPS;
@@ -1140,9 +1138,7 @@ bool Track::FMDoNext()
 
 	FMNoteOff();
 
-#ifdef SMPS_Asserts
 	assert(value >= 0x80 || freq != 0);
-#endif
 
 	if (value < 0x80)
 	{
@@ -1220,9 +1216,7 @@ void Track::FMSetFreq(const unsigned char note)
 
 	const unsigned char index = note - 0x80 + transpose;
 
-#ifdef SMPS_Asserts
 	assert(index < 12*8);
-#endif
 
 	freq = FMFrequencies[index];
 }
@@ -1314,9 +1308,7 @@ bool Track::PSGDoNext()
 
 	unsigned char value = *note_or_duration;
 
-#ifdef SMPS_Asserts
 	assert(value >= 0x80 || freq != static_cast<decltype(freq)>(-1));
-#endif
 
 	if (value < 0x80)
 	{
@@ -1376,9 +1368,7 @@ void Track::PSGSetFreq(const unsigned char note)
 
 	const unsigned char index = note - 0x81 + transpose;
 
-#ifdef SMPS_Asserts
 	assert(index < 12 * 7);
-#endif
 
 	freq = PSGFrequencies[index];
 }
