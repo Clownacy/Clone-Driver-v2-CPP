@@ -617,4 +617,4 @@ zActualCyclesPerSample = zTotalCycles / zBatchSize
 	restore
 	padding off
 
-	shared zSampleLookup, zRequestChannel1, zRequestChannel2, zSample1Bank, zSample2Bank, zSample1Volume, zSample2Volume, zSample1Pointer, zSample2Pointer, zMuteSample, zRequestFlag
+	shared zSampleLookup, zRequestChannel1, zRequestChannel2, zSample1Bank, zSample2Bank, zSample1Volume, zSample2Volume, zSample1Pointer, zSample2Pointer, zMuteSample, zRequestFlag, zBatchSize, zDriverSampleRate

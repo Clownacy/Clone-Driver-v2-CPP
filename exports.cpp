@@ -2,6 +2,7 @@
 #include <limits>
 
 #include "core.h"
+#include "dac/DAC-Driver.h"
 
 template<std::size_t N>
 class Number {};
@@ -112,8 +113,61 @@ static constexpr auto CombineText(T &&...arrays)
 __attribute__((visibility("default"))) auto text = []()
 {
 	return CombineText(
+		"SMPS_PAUSE_OFFSET = ", MakeText<offsetof(SMPS::State, pause)>(), '\n',
 		"SMPS_QUEUE_OFFSET = ", MakeText<offsetof(SMPS::State, variables) + offsetof(SMPS::Variables, queue)>(), '\n',
 		"SMPS_COMMUNICATION_BYTE_OFFSET = ", MakeText<offsetof(SMPS::State, variables) + offsetof(SMPS::Variables, communication_byte)>(), '\n',
-		"SMPS_RAM_SIZE = ", MakeText<sizeof(SMPS::State)>(), '\n'
+		"SMPS_RAM_SIZE = ", MakeText<sizeof(SMPS::State)>(), '\n',
+		"SMPS_DAC_BATCH_SIZE = ", MakeText<zBatchSize>(), '\n',
+		"SMPS_DAC_SAMPLE_RATE = ", MakeText<zDriverSampleRate>(), '\n',
+		"SMPS_NON_BACKUP_TRACK_COUNT = ", MakeText<SMPS::NON_BACKUP_TRACK_COUNT>(), '\n',
+		"SMPS_MUSIC_FM_TRACK_COUNT = ", MakeText<SMPS::MUSIC_FM_TRACK_COUNT>(), '\n',
+		"SMPS_MUSIC_PSG_TRACK_COUNT = ", MakeText<SMPS::MUSIC_PSG_TRACK_COUNT>(), '\n',
+		"SMPS_SFX_FM_TRACK_COUNT = ", MakeText<SMPS::SFX_FM_TRACK_COUNT>(), '\n',
+		"SMPS_SFX_PSG_TRACK_COUNT = ", MakeText<SMPS::SFX_PSG_TRACK_COUNT>(), '\n',
+#ifdef SMPS_EnablePWM
+		"SMPS_FEATURE_PWM = 1\n"
+#else
+		"SMPS_FEATURE_PWM = 0\n"
+#endif
+#ifdef SMPS_SoundTest
+		"SMPS_FEATURE_SOUND_TEST = 1\n"
+#else
+		"SMPS_FEATURE_SOUND_TEST = 0\n"
+#endif
+#ifdef SMPS_EnableModulationEnvelopes
+		"SMPS_FEATURE_MODULATION_ENVELOPES = 1\n"
+#else
+		"SMPS_FEATURE_MODULATION_ENVELOPES = 0\n"
+#endif
+#ifdef SMPS_EnableSpecSFX
+		"SMPS_FEATURE_BACKGROUND_SFX = 1\n"
+#else
+		"SMPS_FEATURE_BACKGROUND_SFX = 0\n"
+#endif
+#ifdef SMPS_GloopSFXBehaviour
+		"SMPS_FEATURE_GLOOP_SFX = 1\n"
+#else
+		"SMPS_FEATURE_GLOOP_SFX = 0\n"
+#endif
+#ifdef SMPS_EnableSpinDashSFX
+		"SMPS_FEATURE_SPIN_DASH_SFX = 1\n"
+#else
+		"SMPS_FEATURE_SPIN_DASH_SFX = 0\n"
+#endif
+#ifdef SMPS_PushSFXBehaviour
+		"SMPS_FEATURE_PUSH_SFX = 1\n"
+#else
+		"SMPS_FEATURE_PUSH_SFX = 0\n"
+#endif
+#ifdef SMPS_EnableContSFX
+		"SMPS_FEATURE_CONTINUOUS_SFX = 1\n"
+#else
+		"SMPS_FEATURE_CONTINUOUS_SFX = 0\n"
+#endif
+#ifdef SMPS_EnableUniversalVoiceBank
+		"SMPS_FEATURE_UNIVERSAL_VOICE_BANK = 1\n"
+#else
+		"SMPS_FEATURE_UNIVERSAL_VOICE_BANK = 0\n"
+#endif
 	);
 }();
