@@ -1,0 +1,3 @@
+[submodule "clownlzss"]
+	path = clownlzss
+	url = https://github.com/Clownacy/clownlzss
