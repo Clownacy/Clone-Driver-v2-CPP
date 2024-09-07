@@ -144,7 +144,8 @@ static void StopAllSound()
 	State &state = data->state;
 
 	state.variables = {};
-	std::fill(&state.tracks[NON_BACKUP_TRACKS_BEGIN], &state.tracks[NON_BACKUP_TRACKS_END], Track{});
+	for (Track *track = &state.tracks[NON_BACKUP_TRACKS_BEGIN]; track != &state.tracks[NON_BACKUP_TRACKS_END]; ++track)
+		*track = {};
 
 	FMSafeZ80Bus z80_bus;
 
