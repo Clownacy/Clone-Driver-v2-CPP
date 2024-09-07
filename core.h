@@ -411,6 +411,7 @@ namespace SMPS
 		struct
 		{
 			const DACSample *list;
+			unsigned short begin, end;
 		} dac;
 		struct
 		{

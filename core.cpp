@@ -156,23 +156,47 @@ static void StopAllSound()
 
 static const DACSample& GetDACSampleMetadata(const unsigned int id)
 {
-	return data->dac.list[id - 0x81];
+	return data->dac.list[id];
 }
 
-static void SendDACSampleRequest(ClownMDSDK::Z80::Bus &bus, const DACSample &sample)
+static void SendDACSampleRequest(ClownMDSDK::Z80::Bus &bus, const unsigned int channel, const DACSample &sample)
 {
 #ifdef __MEGA_DRIVE__
 	// TODO: Assembly?
-
+	const unsigned int offset = channel != 0 ? zRequestChannel2 : zRequestChannel1;
 	bus.ram[zRequestFlag] = z80_scf_instruction;
 	// 'Play sample' command value
-	bus.ram[zRequestChannel1 + 0] = 1;
+	bus.ram[offset + 0] = 1;
 	// Copy the sample's metadata
-	bus.ram[zRequestChannel1 + 1] = sample.bank_offset.upper;
-	bus.ram[zRequestChannel1 + 2] = sample.bank_offset.lower;
-	bus.ram[zRequestChannel1 + 3] = sample.playback_increment.upper;
-	bus.ram[zRequestChannel1 + 4] = sample.playback_increment.lower;
-	bus.ram[zRequestChannel1 + 5] = sample.bank_index;
+	bus.ram[offset + 1] = sample.bank_offset.upper;
+	bus.ram[offset + 2] = sample.bank_offset.lower;
+	bus.ram[offset + 3] = sample.playback_increment.upper;
+	bus.ram[offset + 4] = sample.playback_increment.lower;
+	bus.ram[offset + 5] = sample.bank_index;
+#endif
+}
+
+static void PlayDACSFX(const unsigned int dac_channel, const unsigned int dac_index)
+{
+	State &state = data->state;
+
+	state.tracks[MUSIC_DAC].SetFM6Overridden(true);
+	state.tracks[MUSIC_FM6].SetFM6Overridden(true);
+
+	const auto &sample = GetDACSampleMetadata(dac_index);
+
+	FMSafeZ80Bus z80_bus;
+
+	// Enable DAC.
+	z80_bus.WriteFMI(0x2B, 0x80);
+
+	// Force L/R panning.
+	z80_bus.WriteFMII(0xB6, 0xC0);
+
+	SendDACSampleRequest(z80_bus, dac_channel, sample);
+#ifdef __MEGA_DRIVE__
+	// This is a DAC SFX: set to full volume
+	z80_bus.ram[dac_channel != 0 ? zSample2Volume : zSample1Volume] = zSampleLookup >> 8;
 #endif
 }
 
@@ -595,17 +619,8 @@ bool Track::CoordFlag(const unsigned int flag)
 			break;
 
 		case 0x19: // cfPlayDACSample
-		{
-			const auto &sample = GetDACSampleMetadata(*data_pointer++);
-
-			ClownMDSDK::Z80::Bus z80_bus;
-			SendDACSampleRequest(z80_bus, sample);
-#ifdef __MEGA_DRIVE__
-			// This is a DAC SFX: set to full volume
-			z80_bus.ram[zSample1Volume] = zSampleLookup >> 8;
-#endif
+			PlayDACSFX(0, *data_pointer++ - 1);
 			break;
-		}
 
 		case 0x1A: // cfPlaySound
 			state.variables.queue[1] = *data_pointer++;
@@ -847,7 +862,7 @@ void Track::DACUpdateSample()
 
 	State &state = data->state;
 
-	const auto &sample = GetDACSampleMetadata(saved_dac);
+	const auto &sample = GetDACSampleMetadata(saved_dac - 0x81);
 
 	{
 		FMSafeZ80Bus z80_bus;
@@ -858,7 +873,7 @@ void Track::DACUpdateSample()
 			z80_bus.WriteFMII(0xB6, ams_fms_pan);
 		}
 
-		SendDACSampleRequest(z80_bus, sample);
+		SendDACSampleRequest(z80_bus, 0, sample);
 	}
 
 	if (state.tracks[MUSIC_DAC].IsFM6Overridden())
@@ -1508,7 +1523,7 @@ static void Sound_PlayBGM(const unsigned int id)
 {
 	State &state = data->state;
 
-	const Music &music = data->music.list[id - data->music.begin];
+	const Music &music = data->music.list[id];
 
 	if (music.extra_life_jingle)
 	{
@@ -1661,7 +1676,7 @@ static void Sound_PlaySFX(const unsigned int id)
 	state.spindash_lastsound = false;
 #endif
 
-	const SFX &sfx = data->sfx.list[id - data->sfx.begin];
+	const SFX &sfx = data->sfx.list[id];
 
 	const unsigned char* const header = sfx.data;
 
@@ -1796,7 +1811,7 @@ static void Sound_PlaySpecial(const unsigned int id)
 	if (state.variables.playing_1up)
 		return;
 
-	const unsigned char* const header = data->background_sfx.list[id - data->background_sfx.begin].data;
+	const unsigned char* const header = data->background_sfx.list[id].data;
 
 	const Voice* const voices = reinterpret_cast<const Voice*>(&header[ReadAlignedSignedWord(header)]);
 
@@ -1858,21 +1873,37 @@ static void Sound_PlaySpecial(const unsigned int id)
 }
 #endif
 
+static void Sound_PlayDAC(const unsigned int id)
+{
+	PlayDACSFX(1, id);
+}
+
 static void PlaySoundID(const unsigned int id)
 {
 	if (id >= data->music.begin && id < data->music.end)
-		Sound_PlayBGM(id);
+		Sound_PlayBGM(id - data->music.begin);
 	else if (id >= data->sfx.begin && id < data->sfx.end)
-		Sound_PlaySFX(id);
+		Sound_PlaySFX(id - data->sfx.begin);
 #ifdef SMPS_EnableSpecSFX
 	else if (id >= data->background_sfx.begin && id < data->background_sfx.end)
-		Sound_PlaySpecial(id);
+		Sound_PlaySpecial(id - data->background_sfx.begin);
 #endif
+	else if (id >= data->dac.begin && id < data->dac.end)
+		Sound_PlayDAC(id - data->dac.begin);
 
 	State &state = data->state;
 
 	switch (id)
 	{
+		case 0xFF8: // StopDACSFX
+		{
+			ClownMDSDK::Z80::Bus z80_bus;
+			z80_bus.ram[zRequestFlag] = z80_scf_instruction;
+			// 'Stop PCM channel' command value
+			z80_bus.ram[zRequestChannel2] = 2;
+			break;
+		}
+
 	#ifdef SMPS_EnableSpecSFX
 		case 0xFF9: // SpecStopSFX
 		{
@@ -2336,3 +2367,4 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 // TODO: Allow SFX to use universal voice bank too.
 // TODO: Clean-up 'IsPSG' calls.
 // TODO: Make IsPlaying and all that into proper 1-bit booleans.
+// TODO: Constants for DAC driver commands.
