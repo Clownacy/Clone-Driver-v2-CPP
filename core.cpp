@@ -2081,13 +2081,12 @@ static void CycleSoundQueue()
 				return std::nullopt;
 		}();
 
-		if (priority.has_value())
+		if (priority.has_value() && !priority->do_not_save)
 		{
 			if (priority->value < state.variables.sndprio)
 				continue;
 
-			if (!priority->do_not_save)
-				state.variables.sndprio = priority->value;
+			state.variables.sndprio = priority->value;
 		}
 
 		PlaySoundID(id);
