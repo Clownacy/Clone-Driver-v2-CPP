@@ -1895,64 +1895,11 @@ static void PlaySoundID(const unsigned int id)
 
 	switch (id)
 	{
-		case 0xFF8: // StopDACSFX
-		{
-			ClownMDSDK::Z80::Bus z80_bus;
-			z80_bus.ram[zRequestFlag] = z80_scf_instruction;
-			// 'Stop PCM channel' command value
-			z80_bus.ram[zRequestChannel2] = 2;
+		case 1: // StopAllSound
+			StopAllSound();
 			break;
-		}
 
-	#ifdef SMPS_EnableSpecSFX
-		case 0xFF9: // SpecStopSFX
-		{
-			Track &background_sfx_fm4 = state.tracks[SPECIAL_SFX_FM4];
-
-			if (background_sfx_fm4.IsPlaying())
-			{
-				background_sfx_fm4.SetPlaying(false);
-
-				if (!background_sfx_fm4.IsOverridden())
-				{
-					FMSafeZ80Bus z80_bus;
-
-					background_sfx_fm4.SendFMNoteOff(z80_bus);
-
-					Track &music_fm4 = state.tracks[MUSIC_FM4];
-					music_fm4.SetOverridden(false);
-					music_fm4.SetResting(true);
-
-					if (music_fm4.IsPlaying())
-						music_fm4.SetVoice(z80_bus);
-				}
-			}
-
-			Track &background_sfx_psg3 = state.tracks[SPECIAL_SFX_PSG3];
-
-			if (background_sfx_psg3.IsPlaying())
-			{
-				background_sfx_psg3.SetPlaying(false);
-
-				if (!background_sfx_psg3.IsOverridden())
-				{
-					background_sfx_psg3.SendPSGNoteOff();
-
-					Track &music_psg3 = state.tracks[MUSIC_PSG3];
-					music_psg3.SetOverridden(false);
-					music_psg3.SetResting(true);
-
-					if (music_psg3.IsPlaying())
-						if (music_psg3.voice_control == 0xE0)
-							ClownMDSDK::PSG::Write(music_psg3.psg_noise);
-				}
-			}
-
-			break;
-		}
-		#endif
-
-		case 0xFFA: // StopSFX
+		case 2: // StopSFX
 			state.variables.sndprio = false;
 
 			{
@@ -2017,31 +1964,70 @@ static void PlaySoundID(const unsigned int id)
 
 			break;
 
-		case 0xFFB: // FadeOutMusic
+	#ifdef SMPS_EnableSpecSFX
+		case 3: // SpecStopSFX
+		{
+			Track &background_sfx_fm4 = state.tracks[SPECIAL_SFX_FM4];
+
+			if (background_sfx_fm4.IsPlaying())
+			{
+				background_sfx_fm4.SetPlaying(false);
+
+				if (!background_sfx_fm4.IsOverridden())
+				{
+					FMSafeZ80Bus z80_bus;
+
+					background_sfx_fm4.SendFMNoteOff(z80_bus);
+
+					Track &music_fm4 = state.tracks[MUSIC_FM4];
+					music_fm4.SetOverridden(false);
+					music_fm4.SetResting(true);
+
+					if (music_fm4.IsPlaying())
+						music_fm4.SetVoice(z80_bus);
+				}
+			}
+
+			Track &background_sfx_psg3 = state.tracks[SPECIAL_SFX_PSG3];
+
+			if (background_sfx_psg3.IsPlaying())
+			{
+				background_sfx_psg3.SetPlaying(false);
+
+				if (!background_sfx_psg3.IsOverridden())
+				{
+					background_sfx_psg3.SendPSGNoteOff();
+
+					Track &music_psg3 = state.tracks[MUSIC_PSG3];
+					music_psg3.SetOverridden(false);
+					music_psg3.SetResting(true);
+
+					if (music_psg3.IsPlaying())
+						if (music_psg3.voice_control == 0xE0)
+							ClownMDSDK::PSG::Write(music_psg3.psg_noise);
+				}
+			}
+
+			break;
+		}
+		#endif
+
+		case 4: // StopDACSFX
+		{
+			ClownMDSDK::Z80::Bus z80_bus;
+			z80_bus.ram[zRequestFlag] = z80_scf_instruction;
+			// 'Stop PCM channel' command value
+			z80_bus.ram[zRequestChannel2] = 2;
+			break;
+		}
+
+		case 5: // FadeOutMusic
 			state.variables.fadeout_delay = 3;
 			state.variables.fadeout_counter = 0x28;
 			state.variables.speedup = false;
 			break;
 
-		case 0xFFC:
-			state.tracks[MUSIC_DAC].SetFM6Overridden(true);
-			state.tracks[MUSIC_FM6].SetFM6Overridden(true);
-
-			{
-				FMSafeZ80Bus z80_bus;
-
-				// Enable DAC.
-				z80_bus.WriteFMI(0x2B, 0x80);
-
-				// Force L/R panning.
-				z80_bus.WriteFMII(0xB6, 0xC0);
-
-				// TODO: The rest of this bullshit.
-			}
-
-			break;
-
-		case 0xFFD: // SpeedUpMusic
+		case 6: // SpeedUpMusic
 			if (state.variables.playing_1up)
 			{
 				state.variables_backup.main_tempo = state.variables_backup.speeduptempo;
@@ -2055,7 +2041,7 @@ static void PlaySoundID(const unsigned int id)
 			
 			break;
 
-		case 0xFFE: // SlowDownMusic
+		case 7: // SlowDownMusic
 			if (state.variables.playing_1up)
 			{
 				state.variables_backup.main_tempo = state.variables_backup.tempo_mod;
@@ -2067,10 +2053,6 @@ static void PlaySoundID(const unsigned int id)
 				state.variables.speedup = false;
 			}
 			
-			break;
-
-		case 0xFFF:
-			StopAllSound();
 			break;
 	}
 }
@@ -2084,9 +2066,7 @@ static void CycleSoundQueue()
 		const unsigned int id = queue_slot;
 		queue_slot = 0;
 
-		// TODO: Is there a better way to handle ID gaps here?
-
-		if (id < data->music.begin)
+		if (id == 0)
 			continue;
 
 		const std::optional<Priority> priority = [&]() -> std::optional<Priority>
