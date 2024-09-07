@@ -309,58 +309,9 @@ bool Track::CoordFlag(const unsigned int flag)
 			break;
 
 		case 4: // cfFadeInToPrevious
-		{
-			std::copy(&state.tracks[BACKUP_BEGIN], &state.tracks[BACKUP_END], &state.tracks[MUSIC_BEGIN]);
-			state.variables = state.variables_backup;
-
-			for (Track *track = &state.tracks[MUSIC_BEGIN]; track != &state.tracks[MUSIC_END]; ++track)
-			{
-				// Back-up the 'is playing' flag to the 'is overridden' flag.
-				track->SetPlaying(track->IsOverridden());
-
-				// Disable the track, so that nothing updates it whilst it is backed-up.
-				track->SetOverridden(false);
-			}
-
-			state.variables.fadein_counter = 0x28;
-
-			Track* const dac_track = &state.tracks[MUSIC_DAC];
-
-			{
-				FMSafeZ80Bus z80_bus;
-
-				if (dac_track->IsPlaying())
-					dac_track->SetDACVolume(z80_bus);
-
-				for (Track *fm_track = &state.tracks[MUSIC_FM_BEGIN]; fm_track != &state.tracks[MUSIC_FM_END]; ++fm_track)
-				{
-					if (fm_track->IsPlaying())
-					{
-						fm_track->SetResting(true);
-						fm_track->SetVoice(z80_bus);
-					}
-				}
-			}
-
-			for (Track *psg_track = &state.tracks[MUSIC_PSG_BEGIN]; psg_track != &state.tracks[MUSIC_PSG_END]; ++psg_track)
-			{
-				if (psg_track->IsPlaying())
-				{
-					psg_track->SetResting(true);
-					psg_track->PSGNoteOff();
-
-					if (psg_track->voice_control == 0xE0)
-						ClownMDSDK::PSG::Write(psg_track->psg_noise);
-				}
-			}
-
-			state.tracks[MUSIC_DAC].SetFM6Overridden(true);
-			state.tracks[MUSIC_FM6].SetFM6Overridden(true);
-
-			state.variables.playing_1up = false;
-
+			// We must handle this later to prevent the DAC channel from desynchronising.
+			state.variables.fade_to_previous_pending = true;
 			return false;
-		}
 
 		case 5: // cfSetTempoDivider
 			tempo_divider = *data_pointer++;
@@ -2120,6 +2071,58 @@ static void UpdateMusic()
 			track->PSGUpdateTrack();
 
 	TempoWait();
+
+	if (state.variables.fade_to_previous_pending)
+	{
+		std::copy(&state.tracks[BACKUP_BEGIN], &state.tracks[BACKUP_END], &state.tracks[MUSIC_BEGIN]);
+		state.variables = state.variables_backup;
+
+		for (Track *track = &state.tracks[MUSIC_BEGIN]; track != &state.tracks[MUSIC_END]; ++track)
+		{
+			// Back-up the 'is playing' flag to the 'is overridden' flag.
+			track->SetPlaying(track->IsOverridden());
+
+			// Disable the track, so that nothing updates it whilst it is backed-up.
+			track->SetOverridden(false);
+		}
+
+		state.variables.fadein_counter = 0x28;
+
+		Track* const dac_track = &state.tracks[MUSIC_DAC];
+
+		{
+			FMSafeZ80Bus z80_bus;
+
+			if (dac_track->IsPlaying())
+				dac_track->SetDACVolume(z80_bus);
+
+			for (Track *fm_track = &state.tracks[MUSIC_FM_BEGIN]; fm_track != &state.tracks[MUSIC_FM_END]; ++fm_track)
+			{
+				if (fm_track->IsPlaying())
+				{
+					fm_track->SetResting(true);
+					fm_track->SetVoice(z80_bus);
+				}
+			}
+		}
+
+		for (Track *psg_track = &state.tracks[MUSIC_PSG_BEGIN]; psg_track != &state.tracks[MUSIC_PSG_END]; ++psg_track)
+		{
+			if (psg_track->IsPlaying())
+			{
+				psg_track->SetResting(true);
+				psg_track->PSGNoteOff();
+
+				if (psg_track->voice_control == 0xE0)
+					ClownMDSDK::PSG::Write(psg_track->psg_noise);
+			}
+		}
+
+		state.tracks[MUSIC_DAC].SetFM6Overridden(true);
+		state.tracks[MUSIC_FM6].SetFM6Overridden(true);
+
+		state.variables.playing_1up = false;
+	}
 }
 
 static void DoFadeIn()

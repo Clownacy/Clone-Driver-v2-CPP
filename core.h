@@ -283,6 +283,7 @@ namespace SMPS
 		unsigned char main_tempo_timeout;
 		unsigned char main_tempo;
 		bool playing_1up : 1;
+		bool fade_to_previous_pending : 1;
 		bool speedup : 1;
 		bool force_pal_tempo : 1;
 
