@@ -1110,6 +1110,9 @@ bool Track::FMDoNext()
 	if (value < 0x80)
 	{
 		SetDuration(value);
+
+		if (freq == 0)
+		    SetResting(true);
 	}
 	else
 	{
@@ -1280,6 +1283,9 @@ bool Track::PSGDoNext()
 	if (value < 0x80)
 	{
 		SetDuration(value);
+
+		if (freq == static_cast<decltype(freq)>(-1))
+		    SetResting(true);
 	}
 	else
 	{
