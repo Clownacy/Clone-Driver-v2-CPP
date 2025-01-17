@@ -1972,10 +1972,12 @@ static void PlaySoundID(const unsigned int id)
 
 		case 4: // StopDACSFX
 		{
+#ifdef __MEGA_DRIVE__
 			ClownMDSDK::Z80::Bus z80_bus;
 			z80_bus.ram[zRequestFlag] = z80_scf_instruction;
 			// 'Stop PCM channel' command value
 			z80_bus.ram[zRequestChannel2] = 2;
+#endif
 			break;
 		}
 
