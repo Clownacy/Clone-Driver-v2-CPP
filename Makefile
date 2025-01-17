@@ -1,4 +1,4 @@
-	include /opt/clownmdsdk/bare.mk
+	include /opt/clownmdsdk/generic.mk
 
 CXXFLAGS += -O3 -Wall -Wextra -Wpedantic -ffixed-a5 -std=c++23 -mpcrel -flto -fvisibility=hidden -DBINARY_BLOB -DNDEBUG
 LDFLAGS += -save-temps=obj -shared -Wl,-shared -T link.ld
@@ -11,7 +11,7 @@ output/exports/output.bin: exports.cpp
 
 output/%/output.bin: %.cpp
 	mkdir -p $(@D)
-	$(CXX) $^ -o $@ $(CXXFLAGS) $(LDFLAGS) -lc
+	$(CXX) $^ -o $@ $(CXXFLAGS) $(LDFLAGS)
 
 output/%.bin: output/%/output.bin
 	cp $^ $@

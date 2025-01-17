@@ -58,9 +58,9 @@ STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, c
 			{
 				unsigned char byte1, byte2;
 				{
-					ClownMDSDK::Z80::Bus z80_bus;
-					byte1 = z80_bus.ram[zSample1Pointer + 0];
-					byte2 = z80_bus.ram[zSample1Pointer + 1];
+					ClownMDSDK::MainCPU::Z80::Bus z80_bus;
+					byte1 = z80_bus.RAM(zSample1Pointer + 0);
+					byte2 = z80_bus.RAM(zSample1Pointer + 1);
 				}
 				return WordFromBytes(byte2, byte1);
 			}();

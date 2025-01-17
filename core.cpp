@@ -117,19 +117,19 @@ static void FMSilenceAll(FMSafeZ80Bus &z80_bus)
 static void PSGSilenceAll()
 {
 	// Set all channels to maximum attenuation.
-	ClownMDSDK::PSG::Write(0x80 | 0x1F); // PSG1
-	ClownMDSDK::PSG::Write(0xA0 | 0x1F); // PSG2
-	ClownMDSDK::PSG::Write(0xC0 | 0x1F); // PSG3
-	ClownMDSDK::PSG::Write(0xE0 | 0x1F); // PSG Noise
+	ClownMDSDK::MainCPU::PSG::Write(0x80 | 0x1F); // PSG1
+	ClownMDSDK::MainCPU::PSG::Write(0xA0 | 0x1F); // PSG2
+	ClownMDSDK::MainCPU::PSG::Write(0xC0 | 0x1F); // PSG3
+	ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F); // PSG Noise
 }
 
 static void SilenceAll(FMSafeZ80Bus &z80_bus)
 {
 #ifdef __MEGA_DRIVE__
-	z80_bus.ram[zRequestFlag] = z80_scf_instruction;
+	z80_bus.RAM(zRequestFlag) = z80_scf_instruction;
 	// 'Stop PCM channel' command value
-	z80_bus.ram[zRequestChannel1] = 2;
-	z80_bus.ram[zRequestChannel2] = 2;
+	z80_bus.RAM(zRequestChannel1) = 2;
+	z80_bus.RAM(zRequestChannel2) = 2;
 #endif
 
 	FMSilenceAll(z80_bus);
@@ -160,20 +160,20 @@ static const DACSample& GetDACSampleMetadata(const unsigned int id)
 	return data->dac.list[id];
 }
 
-static void SendDACSampleRequest(ClownMDSDK::Z80::Bus &bus, const unsigned int channel, const DACSample &sample)
+static void SendDACSampleRequest(ClownMDSDK::MainCPU::Z80::Bus &bus, const unsigned int channel, const DACSample &sample)
 {
 #ifdef __MEGA_DRIVE__
 	// TODO: Assembly?
 	const unsigned int offset = channel != 0 ? zRequestChannel2 : zRequestChannel1;
-	bus.ram[zRequestFlag] = z80_scf_instruction;
+	bus.RAM(zRequestFlag) = z80_scf_instruction;
 	// 'Play sample' command value
-	bus.ram[offset + 0] = 1;
+	bus.RAM(offset + 0) = 1;
 	// Copy the sample's metadata
-	bus.ram[offset + 1] = sample.bank_offset.upper;
-	bus.ram[offset + 2] = sample.bank_offset.lower;
-	bus.ram[offset + 3] = sample.playback_increment.upper;
-	bus.ram[offset + 4] = sample.playback_increment.lower;
-	bus.ram[offset + 5] = sample.bank_index;
+	bus.RAM(offset + 1) = sample.bank_offset.upper;
+	bus.RAM(offset + 2) = sample.bank_offset.lower;
+	bus.RAM(offset + 3) = sample.playback_increment.upper;
+	bus.RAM(offset + 4) = sample.playback_increment.lower;
+	bus.RAM(offset + 5) = sample.bank_index;
 #endif
 }
 
@@ -197,20 +197,20 @@ static void PlayDACSFX(const unsigned int dac_channel, const unsigned int dac_in
 	SendDACSampleRequest(z80_bus, dac_channel, sample);
 #ifdef __MEGA_DRIVE__
 	// This is a DAC SFX: set to full volume
-	z80_bus.ram[dac_channel != 0 ? zSample2Volume : zSample1Volume] = zSampleLookup >> 8;
+	z80_bus.RAM(dac_channel != 0 ? zSample2Volume : zSample1Volume) = zSampleLookup >> 8;
 #endif
 }
 
-static void WriteDACVolume(ClownMDSDK::Z80::Bus &z80_bus, const unsigned int volume)
+static void WriteDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigned int volume)
 {
 #ifdef __MEGA_DRIVE__
-	z80_bus.ram[zSample1Volume] = volume | zSampleLookup >> 8;
+	z80_bus.RAM(zSample1Volume) = volume | zSampleLookup >> 8;
 #endif
 }
 
 static void WriteDACVolume(const unsigned int volume)
 {
-	ClownMDSDK::Z80::Bus z80_bus;
+	ClownMDSDK::MainCPU::Z80::Bus z80_bus;
 	WriteDACVolume(z80_bus, volume);
 }
 
@@ -334,7 +334,7 @@ bool Track::CoordFlag(const unsigned int flag)
 
 			if (IsDAC())
 			{
-				ClownMDSDK::Z80::Bus z80_bus;
+				ClownMDSDK::MainCPU::Z80::Bus z80_bus;
 				SetDACVolume(z80_bus);
 			}
 			else
@@ -492,7 +492,7 @@ bool Track::CoordFlag(const unsigned int flag)
 				track->SetResting(true);
 
 				if (track->voice_control == 0xE0)
-					ClownMDSDK::PSG::Write(track->psg_noise);
+					ClownMDSDK::MainCPU::PSG::Write(track->psg_noise);
 			}
 
 			return false;
@@ -511,7 +511,7 @@ bool Track::CoordFlag(const unsigned int flag)
 			}
 
 			if (!IsOverridden())
-				ClownMDSDK::PSG::Write(value);
+				ClownMDSDK::MainCPU::PSG::Write(value);
 
 			break;
 		}
@@ -887,7 +887,7 @@ void Track::DACUpdateTrack()
 	DACUpdateSample();
 }
 
-void Track::SetDACVolume(ClownMDSDK::Z80::Bus &z80_bus)
+void Track::SetDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 {
 	State &state = data->state;
 	
@@ -1160,7 +1160,7 @@ static constexpr std::array FMFrequencies = []() constexpr
 {
 	static constexpr auto MakeFMFrequency = [](const double frequency) constexpr
 	{
-		return our_lround(frequency * 0x400 * 0x400 * 2 / ClownMDSDK::FM::sample_rate);
+		return our_lround(frequency * 0x400 * 0x400 * 2 / ClownMDSDK::MainCPU::FM::sample_rate);
 	};
 	
 	// The first note is B, the last note is B-flat.
@@ -1261,8 +1261,8 @@ bool Track::PSGDoNoteOn()
 
 	const unsigned int channel = voice_control == 0xE0 ? 0xC0 : voice_control;
 
-	ClownMDSDK::PSG::Write((*value & 0xF) | channel);
-	ClownMDSDK::PSG::Write((*value & 0x3F0) >> 4);
+	ClownMDSDK::MainCPU::PSG::Write((*value & 0xF) | channel);
+	ClownMDSDK::MainCPU::PSG::Write((*value & 0x3F0) >> 4);
 
 	return true;
 }
@@ -1310,7 +1310,7 @@ static constexpr auto MakePSGFrequencies(double (&&frequencies)[N])
 	{
 		static constexpr auto MakePSGFrequency = [](const double frequency) constexpr -> T
 		{
-			return std::min<T>(0x3FF, our_lround(ClownMDSDK::PSG::sample_rate / (frequency * 2)));
+			return std::min<T>(0x3FF, our_lround(ClownMDSDK::MainCPU::PSG::sample_rate / (frequency * 2)));
 		};
 
 		return {{MakePSGFrequency(frequencies[I])...}};
@@ -1407,15 +1407,15 @@ void Track::SetPSGVolume(const unsigned int psg_volume)
 	if (IsHeld() && note_timeout_master != 0 && note_timeout == 0)
 		return;
 
-	ClownMDSDK::PSG::Write(0x10 | voice_control | std::min(0xFU, (psg_volume + data->state.variables.fadein_counter * 4) >> 3));
+	ClownMDSDK::MainCPU::PSG::Write(0x10 | voice_control | std::min(0xFU, (psg_volume + data->state.variables.fadein_counter * 4) >> 3));
 }
 
 void Track::SendPSGNoteOff()
 {
-	ClownMDSDK::PSG::Write(voice_control | 0x1F);
+	ClownMDSDK::MainCPU::PSG::Write(voice_control | 0x1F);
 
 	if (voice_control == 0xC0)
-		ClownMDSDK::PSG::Write(0xFF);
+		ClownMDSDK::MainCPU::PSG::Write(0xFF);
 }
 
 void Track::PSGNoteOff()
@@ -1717,11 +1717,11 @@ static void Sound_PlaySFX(const unsigned int id)
 			state.tracks[SFX_BGMChannelRAM[track_lookup_index]].SetOverridden(true);
 
 			// Silence PSG channel.
-			ClownMDSDK::PSG::Write(voice_control | 0x1F);
+			ClownMDSDK::MainCPU::PSG::Write(voice_control | 0x1F);
 
 			// Silence PSG noise channel if this is PSG3.
 			if (voice_control == 0xC0)
-				ClownMDSDK::PSG::Write(0xE0 | 0x1F);
+				ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F);
 		}
 
 		auto &track = state.tracks[SFX_SFXChannelRAM[track_lookup_index]];
@@ -1825,8 +1825,8 @@ static void Sound_PlaySpecial(const unsigned int id)
 
 	if (!state.tracks[SFX_PSG3].IsPlaying())
 	{
-		ClownMDSDK::PSG::Write(0xC0 | 0x1F);
-		ClownMDSDK::PSG::Write(0xE0 | 0x1F);
+		ClownMDSDK::MainCPU::PSG::Write(0xC0 | 0x1F);
+		ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F);
 	}
 }
 #endif
@@ -1915,7 +1915,7 @@ static void PlaySoundID(const unsigned int id)
 						other_track.SetResting(true);
 
 						if (other_track.voice_control == 0xE0)
-							ClownMDSDK::PSG::Write(other_track.psg_noise);
+							ClownMDSDK::MainCPU::PSG::Write(other_track.psg_noise);
 					}
 				}
 			}
@@ -1962,7 +1962,7 @@ static void PlaySoundID(const unsigned int id)
 
 					if (music_psg3.IsPlaying())
 						if (music_psg3.voice_control == 0xE0)
-							ClownMDSDK::PSG::Write(music_psg3.psg_noise);
+							ClownMDSDK::MainCPU::PSG::Write(music_psg3.psg_noise);
 				}
 			}
 
@@ -1973,10 +1973,10 @@ static void PlaySoundID(const unsigned int id)
 		case 4: // StopDACSFX
 		{
 #ifdef __MEGA_DRIVE__
-			ClownMDSDK::Z80::Bus z80_bus;
-			z80_bus.ram[zRequestFlag] = z80_scf_instruction;
+			ClownMDSDK::MainCPU::Z80::Bus z80_bus;
+			z80_bus.RAM(zRequestFlag) = z80_scf_instruction;
 			// 'Stop PCM channel' command value
-			z80_bus.ram[zRequestChannel2] = 2;
+			z80_bus.RAM(zRequestChannel2) = 2;
 #endif
 			break;
 		}
@@ -2123,7 +2123,7 @@ static void UpdateMusic()
 				psg_track->PSGNoteOff();
 
 				if (psg_track->voice_control == 0xE0)
-					ClownMDSDK::PSG::Write(psg_track->psg_noise);
+					ClownMDSDK::MainCPU::PSG::Write(psg_track->psg_noise);
 			}
 		}
 
@@ -2292,10 +2292,10 @@ static void HandlePause()
 			z80_bus.WriteFMII(0xB6, dac_track.ams_fms_pan);
 
 #ifdef __MEGA_DRIVE__
-		z80_bus.ram[zRequestFlag] = z80_scf_instruction;
+		z80_bus.RAM(zRequestFlag) = z80_scf_instruction;
 		// 'Play sample' command value
-		z80_bus.ram[zRequestChannel1] = 1;
-		z80_bus.ram[zRequestChannel2] = 1;
+		z80_bus.RAM(zRequestChannel1) = 1;
+		z80_bus.RAM(zRequestChannel2) = 1;
 #endif
 	}
 }

@@ -18,7 +18,7 @@
 
 namespace SMPS
 {
-	class FMSafeZ80Bus : public ClownMDSDK::Z80::Bus
+	class FMSafeZ80Bus : public ClownMDSDK::MainCPU::Z80::Bus
 	{
 	public:
 #ifdef __MEGA_DRIVE__
@@ -26,7 +26,7 @@ namespace SMPS
 		{
 			asm volatile(
 				"move.b	#0x2A,%0"
-				: "=Qm" (ClownMDSDK::FM::Unsafe::A0)
+				: "=Qm" (ClownMDSDK::MainCPU::FM::Unsafe::A0)
 			);
 		}
 #endif
@@ -100,7 +100,7 @@ namespace SMPS
 		void DACUpdateSample();
 		[[nodiscard]] bool DACDoNext();
 		void DACUpdateTrack();
-		void SetDACVolume(ClownMDSDK::Z80::Bus &z80_bus);
+		void SetDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 
 		// FM
 		void SendVoiceTLCommon(FMSafeZ80Bus &z80_bus, const Voice &voice, bool force_upload);
