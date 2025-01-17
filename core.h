@@ -419,7 +419,7 @@ namespace SMPS
 			const unsigned char* const *list;
 		} psg;
 #ifdef SMPS_EnableUniversalVoiceBank
-		Voice &universal_voice_bank;
+		const Voice *universal_voice_bank;
 #endif
 		State &state;
 	};

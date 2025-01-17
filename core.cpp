@@ -1523,7 +1523,7 @@ static void Sound_PlayBGM(const unsigned int id)
 	const Voice* const voices =
 #ifdef SMPS_EnableUniversalVoiceBank
 		voice_offset == 0
-		? &data->universal_voice_bank
+		? data->universal_voice_bank
 		:
 #endif
 		reinterpret_cast<const Voice*>(&header[voice_offset]);
