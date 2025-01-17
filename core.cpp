@@ -1836,19 +1836,8 @@ static void Sound_PlayDAC(const unsigned int id)
 	PlayDACSFX(1, id);
 }
 
-static void PlaySoundID(const unsigned int id)
+static void Sound_PlayCommand(const unsigned int id)
 {
-	if (id >= data->music.begin && id < data->music.end)
-		Sound_PlayBGM(id - data->music.begin);
-	else if (id >= data->sfx.begin && id < data->sfx.end)
-		Sound_PlaySFX(id - data->sfx.begin);
-#ifdef SMPS_EnableSpecSFX
-	else if (id >= data->background_sfx.begin && id < data->background_sfx.end)
-		Sound_PlaySpecial(id - data->background_sfx.begin);
-#endif
-	else if (id >= data->dac.begin && id < data->dac.end)
-		Sound_PlayDAC(id - data->dac.begin);
-
 	State &state = data->state;
 
 	switch (id)
@@ -2015,6 +2004,22 @@ static void PlaySoundID(const unsigned int id)
 			
 			break;
 	}
+}
+
+static void PlaySoundID(const unsigned int id)
+{
+	if (id >= data->music.begin && id < data->music.end)
+		Sound_PlayBGM(id - data->music.begin);
+	else if (id >= data->sfx.begin && id < data->sfx.end)
+		Sound_PlaySFX(id - data->sfx.begin);
+#ifdef SMPS_EnableSpecSFX
+	else if (id >= data->background_sfx.begin && id < data->background_sfx.end)
+		Sound_PlaySpecial(id - data->background_sfx.begin);
+#endif
+	else if (id >= data->dac.begin && id < data->dac.end)
+		Sound_PlayDAC(id - data->dac.begin);
+	else
+		Sound_PlayCommand(id);
 }
 
 static void CycleSoundQueue()
