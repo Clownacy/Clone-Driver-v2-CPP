@@ -110,7 +110,7 @@ static constexpr auto CombineText(T &&...arrays)
 	return (... + MakeText(arrays));
 }
 
-__attribute__((visibility("default"))) auto text = []()
+__attribute__((section(".exports"))) __attribute__((visibility("default"))) auto text = []()
 {
 	return CombineText(
 		"SMPS_PAUSE_OFFSET = ", MakeText<offsetof(SMPS::State, pause)>(), '\n',
