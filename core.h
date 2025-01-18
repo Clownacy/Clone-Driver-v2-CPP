@@ -24,6 +24,8 @@ namespace SMPS
 #ifdef __MEGA_DRIVE__
 		~FMSafeZ80Bus()
 		{
+			WaitUntilFMReady();
+
 			asm(
 				"move.b	#0x2A,%0"
 				: "=Qm" (ClownMDSDK::MainCPU::FM::Unsafe::a0)
