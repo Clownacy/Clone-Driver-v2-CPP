@@ -656,6 +656,10 @@ bool Track::CoordFlag(const unsigned int flag)
 			++data_pointer;
 #endif
 			break;
+
+		case 0x23: // cfChangePSGDrumVolume
+			state.variables.psg_drum_volume = (state.variables.psg_drum_volume + *data_pointer++) & 0xF;
+			break;
 	}
 
 	return true;
@@ -1426,6 +1430,103 @@ void Track::PSGNoteOff()
 	SendPSGNoteOff();
 }
 
+////////////////////
+// PSG Noise Drum //
+////////////////////
+
+void Track::PSGNoiseSetDrumNote(const unsigned char note)
+{
+	State &state = data->state;
+
+	using Settings = struct {unsigned char volume_envelope, volume, noise_mode;};
+	static const auto settings = std::to_array<Settings>({
+		{1, 2, 0xE4},
+		{3, 2, 0xE4},
+		{2, 2, 0xE5},
+		{3, 2, 0xE4},
+		{3, 3, 0xE6},
+		{4, 4, 0xE4},
+	});
+
+	const std::size_t index = note - 0x81;
+
+	if (index >= std::size(settings))
+	{
+		PSGNoteOff();
+		return;
+	}
+
+	auto &setting = settings[index];
+
+	voice_index = setting.volume_envelope + 0xA - 1; // TODO: Dehardcode the offset.
+	volume = setting.volume + state.variables.psg_drum_volume;
+
+	if (IsOverridden())
+		return;
+
+	ClownMDSDK::MainCPU::PSG::Write(setting.noise_mode);
+}
+
+bool Track::PSGNoiseDoNext()
+{
+	const auto note_or_duration = GetNoteOrDuration();
+
+	if (!note_or_duration.has_value())
+		return false;
+
+	unsigned char value = *note_or_duration;
+
+	if (value < 0x80)
+	{
+		SetDuration(value);
+	}
+	else
+	{
+		PSGNoiseSetDrumNote(value);
+
+		value = *data_pointer++;
+
+		if (value < 0x80)
+		{
+			SetDuration(value);
+		}
+		else
+		{
+			--data_pointer;
+			duration_timeout = saved_duration;
+		}
+	}
+
+	FinishTrackUpdate();
+	return true;
+}
+
+void Track::PSGNoiseUpdateTrack()
+{
+#ifdef SMPS_SoundTest
+	SetSoundTest(false);
+#endif
+
+	if (--duration_timeout == 0)
+	{
+		SetResting(false);
+
+		if (!PSGNoiseDoNext())
+			return;
+	}
+	else
+	{
+		if (!PSGUpdateVolFX())
+			return;
+	}
+
+//	DACUpdateSample();
+}
+
+///////////
+// Other //
+///////////
+
 static void InitMusicPlayback()
 {
 	State &state = data->state;
@@ -1466,7 +1567,7 @@ static void InitMusicPlayback()
 	{
 		static constexpr std::array<unsigned char, MUSIC_TRACK_COUNT> ChannelInitBytes = {
 			6 | 0x10, 0, 1, 2, 4, 5, 6,
-			0x80, 0xA0, 0xC0,
+			0x80, 0xA0, 0xC0, 0xE0,
 		#ifdef SMPS_EnablePWM
 			0 | 8, 2 | 8, 4 | 8, 6 | 8
 		#endif
@@ -2083,6 +2184,9 @@ static void UpdateMusic()
 	for (Track *track = &state.tracks[MUSIC_PSG_BEGIN]; track != &state.tracks[MUSIC_PSG_END]; ++track)
 		if (track->IsPlaying())
 			track->PSGUpdateTrack();
+
+	if (state.tracks[MUSIC_PSG_NOISE].IsPlaying())
+		state.tracks[MUSIC_PSG_NOISE].PSGNoiseUpdateTrack();
 
 	TempoWait();
 

@@ -132,6 +132,11 @@ namespace SMPS
 		void SendPSGNoteOff();
 		void PSGNoteOff();
 
+		// PSG Noise
+		void PSGNoiseUpdateTrack();
+		[[nodiscard]] bool PSGNoiseDoNext();
+		void PSGNoiseSetDrumNote(unsigned char note);
+
 	#define BIT_METHOD_IS(VARIABLE, BIT, NAME) [[nodiscard]] bool Is##NAME() const {return ((VARIABLE) & 1 << (BIT)) != 0;}
 	#define BIT_METHODS(VARIABLE, BIT, NAME) \
 		BIT_METHOD_IS(VARIABLE, BIT, NAME) \
@@ -182,6 +187,7 @@ namespace SMPS
 		MUSIC_PSG1,
 		MUSIC_PSG2,
 		MUSIC_PSG3,
+		MUSIC_PSG_NOISE,
 
 		BACKUP_DAC,
 		BACKUP_FM1,
@@ -193,6 +199,7 @@ namespace SMPS
 		BACKUP_PSG1,
 		BACKUP_PSG2,
 		BACKUP_PSG3,
+		BACKUP_PSG_NOISE,
 
 		TOTAL_TRACKS,
 	};
@@ -232,11 +239,11 @@ namespace SMPS
 		MUSIC_PSG_TRACK_COUNT = MUSIC_PSG_END - MUSIC_PSG_BEGIN,
 
 		MUSIC_BEGIN = MUSIC_FM_DAC_BEGIN,
-		MUSIC_END = MUSIC_PSG_END,
+		MUSIC_END = MUSIC_PSG_NOISE + 1,
 		MUSIC_TRACK_COUNT = MUSIC_END - MUSIC_BEGIN,
 
 		BACKUP_BEGIN = BACKUP_DAC,
-		BACKUP_END = BACKUP_PSG3 + 1,
+		BACKUP_END = BACKUP_PSG_NOISE + 1,
 		BACKUP_TRACK_COUNT = BACKUP_END - BACKUP_BEGIN,
 
 		SFX_FM_BEGIN = SFX_FM3,
@@ -303,6 +310,7 @@ namespace SMPS
 		unsigned short current_contsfx;
 		unsigned char contsfx_channels;
 	#endif
+		unsigned char psg_drum_volume;
 	};
 
 	struct State
