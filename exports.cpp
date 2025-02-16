@@ -120,10 +120,20 @@ __attribute__((section(".exports"))) __attribute__((visibility("default"))) auto
 		"SMPS_DAC_BATCH_SIZE = ", MakeText<zBatchSize>(), '\n',
 		"SMPS_DAC_SAMPLE_RATE = ", MakeText<zDriverSampleRate>(), '\n',
 		"SMPS_NON_BACKUP_TRACK_COUNT = ", MakeText<SMPS::NON_BACKUP_TRACK_COUNT>(), '\n',
+		"SMPS_MUSIC_FM_DAC_TRACK_COUNT = ", MakeText<SMPS::MUSIC_FM_DAC_TRACK_COUNT>(), '\n',
 		"SMPS_MUSIC_FM_TRACK_COUNT = ", MakeText<SMPS::MUSIC_FM_TRACK_COUNT>(), '\n',
 		"SMPS_MUSIC_PSG_TRACK_COUNT = ", MakeText<SMPS::MUSIC_PSG_TRACK_COUNT>(), '\n',
 		"SMPS_SFX_FM_TRACK_COUNT = ", MakeText<SMPS::SFX_FM_TRACK_COUNT>(), '\n',
 		"SMPS_SFX_PSG_TRACK_COUNT = ", MakeText<SMPS::SFX_PSG_TRACK_COUNT>(), '\n',
+#ifdef SMPS_EnableSpecSFX
+		"SMPS_SPECIAL_SFX_FM_TRACK_COUNT = ", MakeText<SMPS::SPECIAL_SFX_FM_TRACK_COUNT>(), '\n',
+		"SMPS_SPECIAL_SFX_PSG_TRACK_COUNT = ", MakeText<SMPS::SPECIAL_SFX_PSG_TRACK_COUNT>(), '\n',
+#endif
+		"SMPS_MUSIC_TRACK_COUNT = ", MakeText<SMPS::MUSIC_TRACK_COUNT>(), '\n',
+		"SMPS_SFX_TRACK_COUNT = ", MakeText<SMPS::SFX_TRACK_COUNT>(), '\n',
+#ifdef SMPS_EnableSpecSFX
+		"SMPS_SPECIAL_SFX_TRACK_COUNT = ", MakeText<SMPS::SPECIAL_SFX_TRACK_COUNT>(), '\n',
+#endif
 #ifdef SMPS_EnablePWM
 		"SMPS_FEATURE_PWM = 1\n"
 #else
