@@ -15,6 +15,7 @@
 #define SMPS_PushSFXBehaviour
 #define SMPS_EnableContSFX
 #define SMPS_EnableUniversalVoiceBank
+//#define SMPS_EnablePSGNoiseDrums
 
 namespace SMPS
 {
@@ -202,8 +203,12 @@ namespace SMPS
 		MUSIC_PSG_END,
 		MUSIC_PSG_TRACK_COUNT = MUSIC_PSG_END - MUSIC_PSG_BEGIN,
 
+#ifdef SMPS_EnablePSGNoiseDrums
 		MUSIC_PSG_NOISE = MUSIC_PSG_END,
 		MUSIC_END,
+#else
+		MUSIC_END = MUSIC_PSG_END,
+#endif
 		MUSIC_TRACK_COUNT = MUSIC_END - MUSIC_BEGIN,
 
 		BACKUP_BEGIN = MUSIC_END,
@@ -217,7 +222,9 @@ namespace SMPS
 		BACKUP_PSG1,
 		BACKUP_PSG2,
 		BACKUP_PSG3,
+#ifdef SMPS_EnablePSGNoiseDrums
 		BACKUP_PSG_NOISE,
+#endif
 		BACKUP_END,
 		BACKUP_TRACK_COUNT = BACKUP_END - BACKUP_BEGIN,
 
@@ -305,7 +312,9 @@ namespace SMPS
 		unsigned short current_contsfx;
 		unsigned char contsfx_channels;
 	#endif
+	#ifdef SMPS_EnablePSGNoiseDrums
 		unsigned char psg_drum_volume;
+	#endif
 	};
 
 	struct State

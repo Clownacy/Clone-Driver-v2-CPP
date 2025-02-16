@@ -658,7 +658,11 @@ bool Track::CoordFlag(const unsigned int flag)
 			break;
 
 		case 0x23: // cfChangePSGDrumVolume
+#ifdef SMPS_EnablePSGNoiseDrums
 			state.variables.psg_drum_volume = (state.variables.psg_drum_volume + *data_pointer++) & 0xF;
+#else
+			++data_pointer;
+#endif
 			break;
 	}
 
@@ -1434,6 +1438,7 @@ void Track::PSGNoteOff()
 // PSG Noise Drum //
 ////////////////////
 
+#ifdef SMPS_EnablePSGNoiseDrums
 void Track::PSGNoiseSetDrumNote(const unsigned char note)
 {
 	State &state = data->state;
@@ -1522,6 +1527,7 @@ void Track::PSGNoiseUpdateTrack()
 
 //	DACUpdateSample();
 }
+#endif
 
 ///////////
 // Other //
@@ -1567,7 +1573,10 @@ static void InitMusicPlayback()
 	{
 		static constexpr std::array<unsigned char, MUSIC_TRACK_COUNT> ChannelInitBytes = {
 			6 | 0x10, 0, 1, 2, 4, 5, 6,
-			0x80, 0xA0, 0xC0, 0xE0,
+			0x80, 0xA0, 0xC0,
+		#ifdef SMPS_EnablePSGNoiseDrums
+			0xE0,
+		#endif
 		#ifdef SMPS_EnablePWM
 			0 | 8, 2 | 8, 4 | 8, 6 | 8
 		#endif
@@ -2184,10 +2193,10 @@ static void UpdateMusic()
 	for (Track *track = &state.tracks[MUSIC_PSG_BEGIN]; track != &state.tracks[MUSIC_PSG_END]; ++track)
 		if (track->IsPlaying())
 			track->PSGUpdateTrack();
-
+#ifdef SMPS_EnablePSGNoiseDrums
 	if (state.tracks[MUSIC_PSG_NOISE].IsPlaying())
 		state.tracks[MUSIC_PSG_NOISE].PSGNoiseUpdateTrack();
-
+#endif
 	TempoWait();
 
 	if (state.variables.fade_to_previous_pending)

@@ -179,5 +179,10 @@ __attribute__((section(".exports"))) __attribute__((visibility("default"))) auto
 #else
 		"SMPS_FEATURE_UNIVERSAL_VOICE_BANK = 0\n"
 #endif
+#ifdef SMPS_EnablePSGNoiseDrums
+		"SMPS_FEATURE_PSG_NOISE_DRUMS = 1\n"
+#else
+		"SMPS_FEATURE_PSG_NOISE_DRUMS = 0\n"
+#endif
 	);
 }();
