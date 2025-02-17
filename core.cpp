@@ -659,7 +659,7 @@ bool Track::CoordFlag(const unsigned int flag)
 
 		case 0x23: // cfChangePSGDrumVolume
 #ifdef SMPS_EnablePSGNoiseDrums
-			state.variables.psg_drum_volume = (state.variables.psg_drum_volume + *data_pointer++) & 0xF;
+			state.variables.psg_drum_volume = (state.variables.psg_drum_volume + (*data_pointer++ << 3)) & (0xF << 3);
 #else
 			++data_pointer;
 #endif
@@ -1456,7 +1456,7 @@ void Track::PSGNoiseSetDrumNote(const unsigned char note)
 #endif
 
 	voice_index = drum.volume_envelope;
-	volume = drum.volume + state.variables.psg_drum_volume;
+	volume = state.variables.psg_drum_volume + (drum.volume << 3);
 
 	if (IsOverridden())
 		return;
@@ -2287,6 +2287,9 @@ static void DoFadeIn()
 
 	FMLoop(MUSIC_FM_BEGIN, MUSIC_FM_END);
 	PSGLoop(MUSIC_PSG_BEGIN, MUSIC_PSG_END);
+#ifdef SMPS_EnablePSGNoiseDrums
+	PSGLoop(MUSIC_PSG_NOISE, MUSIC_PSG_NOISE + 1);
+#endif
 	FMLoop(SFX_FM_BEGIN, SFX_FM_END);
 	PSGLoop(SFX_PSG_BEGIN, SFX_PSG_END);
 #ifdef SMPS_EnableSpecSFX
@@ -2361,6 +2364,18 @@ static void DoFadeOut()
 			}
 		}
 	}
+
+#ifdef SMPS_EnablePSGNoiseDrums
+	auto* const psg_track = &state.tracks[MUSIC_PSG_NOISE];
+
+	if (psg_track->IsPlaying())
+	{
+		state.variables.psg_drum_volume += 4;
+
+		if (state.variables.psg_drum_volume >= 0x80)
+			psg_track->SetPlaying(false);
+	}
+#endif
 }
 
 static void HandlePause()
