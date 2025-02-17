@@ -383,11 +383,13 @@ namespace SMPS
 		Type type;
 	};
 
+#ifdef SMPS_EnableSpecSFX
 	struct BackgroundSFX
 	{
 		const unsigned char *data;
 		Priority priority;
 	};
+#endif
 
 	struct DACSample
 	{
@@ -403,6 +405,15 @@ namespace SMPS
 		} playback_increment;
 		unsigned char bank_index;
 	};
+
+#ifdef SMPS_EnablePSGNoiseDrums
+	struct PSGNoiseDrum
+	{
+		unsigned char volume_envelope;
+		unsigned char volume;
+		unsigned char noise_mode;
+	};
+#endif
 
 	struct Data
 	{
@@ -432,6 +443,12 @@ namespace SMPS
 		{
 			const unsigned char* const *list;
 		} psg;
+#ifdef SMPS_EnablePSGNoiseDrums
+		struct
+		{
+			const PSGNoiseDrum *list;
+		} psg_noise_drums;
+#endif
 #ifdef SMPS_EnableUniversalVoiceBank
 		const Voice *universal_voice_bank;
 #endif

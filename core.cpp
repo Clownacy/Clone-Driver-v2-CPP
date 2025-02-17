@@ -1443,33 +1443,21 @@ void Track::PSGNoiseSetDrumNote(const unsigned char note)
 {
 	State &state = data->state;
 
-	using Settings = struct {unsigned char volume_envelope, volume, noise_mode;};
-	static const auto settings = std::to_array<Settings>({
-		{1, 2, 0xE4},
-		{3, 2, 0xE4},
-		{2, 2, 0xE5},
-		{3, 2, 0xE4},
-		{3, 3, 0xE6},
-		{4, 4, 0xE4},
-	});
-
-	const std::size_t index = note - 0x81;
-
-	if (index >= std::size(settings))
+	if (note < 0x81)
 	{
 		PSGNoteOff();
 		return;
 	}
 
-	auto &setting = settings[index];
+	auto &drum = data->psg_noise_drums.list[note - 0x81];
 
-	voice_index = setting.volume_envelope + 0xA - 1; // TODO: Dehardcode the offset.
-	volume = setting.volume + state.variables.psg_drum_volume;
+	voice_index = drum.volume_envelope;
+	volume = drum.volume + state.variables.psg_drum_volume;
 
 	if (IsOverridden())
 		return;
 
-	ClownMDSDK::MainCPU::PSG::Write(setting.noise_mode);
+	ClownMDSDK::MainCPU::PSG::Write(drum.noise_mode);
 }
 
 bool Track::PSGNoiseDoNext()
