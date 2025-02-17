@@ -22,6 +22,10 @@ STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, c
 		MUSIC_PSG2,
 		MUSIC_PSG3,
 
+	#ifdef SMPS_EnablePSGNoiseDrums
+		MUSIC_PSG_NOISE,
+	#endif
+
 		SFX_FM3,
 		SFX_FM4,
 		SFX_FM5,

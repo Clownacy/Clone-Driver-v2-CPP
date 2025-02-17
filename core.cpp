@@ -1451,6 +1451,10 @@ void Track::PSGNoiseSetDrumNote(const unsigned char note)
 
 	auto &drum = data->psg_noise_drums.list[note - 0x81];
 
+#ifdef SMPS_SoundTest
+	freq = note;
+#endif
+
 	voice_index = drum.volume_envelope;
 	volume = drum.volume + state.variables.psg_drum_volume;
 
