@@ -116,6 +116,7 @@ __attribute__((section(".exports"))) __attribute__((visibility("default"))) auto
 		"SMPS_PAUSE_OFFSET = ", MakeText<offsetof(SMPS::State, pause)>(), '\n',
 		"SMPS_QUEUE_OFFSET = ", MakeText<offsetof(SMPS::State, variables) + offsetof(SMPS::Variables, queue)>(), '\n',
 		"SMPS_COMMUNICATION_BYTE_OFFSET = ", MakeText<offsetof(SMPS::State, variables) + offsetof(SMPS::Variables, communication_byte)>(), '\n',
+		"SMPS_TEMPO_OFFSET = ", MakeText<offsetof(SMPS::State, music_tempo_modifier_master)>(), '\n',
 		"SMPS_RAM_SIZE = ", MakeText<sizeof(SMPS::State)>(), '\n',
 		"SMPS_DAC_BATCH_SIZE = ", MakeText<zBatchSize>(), '\n',
 		"SMPS_DAC_SAMPLE_RATE = ", MakeText<zDriverSampleRate>(), '\n',

@@ -2456,6 +2456,14 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 		UpdateMusic();
 	}
 
+	// Handle the tempo modifier, as used by Sonic 3 & Knuckles.
+	// TODO: Backing-up and other stuff from the S&K driver.
+	if (state.music_tempo_modifier_master != 0 && state.music_tempo_modifier-- == 0)
+	{
+		state.music_tempo_modifier = state.music_tempo_modifier_master;
+		UpdateMusic();
+	}
+
 	UpdateMusic();
 
 	for (Track *track = &state.tracks[SFX_FM_BEGIN]; track != &state.tracks[SFX_FM_END]; ++track)

@@ -343,6 +343,8 @@ namespace SMPS
 		unsigned char spindash_timer;
 		unsigned char spindash_pitch;
 	#endif
+
+		unsigned char music_tempo_modifier, music_tempo_modifier_master;
 	};
 
 	struct Priority
