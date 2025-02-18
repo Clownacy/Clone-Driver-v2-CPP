@@ -659,7 +659,7 @@ bool Track::CoordFlag(const unsigned int flag)
 
 		case 0x23: // cfChangePSGDrumVolume
 #ifdef SMPS_EnablePSGNoiseDrums
-			state.variables.psg_drum_volume = (state.variables.psg_drum_volume + (*data_pointer++ << 3)) & (0xF << 3);
+			state.variables.psg_drum_volume = (state.variables.psg_drum_volume + *data_pointer++) & (0xF << 3);
 #else
 			++data_pointer;
 #endif
