@@ -147,6 +147,9 @@ static void StopAllSound()
 	for (Track *track = &state.tracks[NON_BACKUP_TRACKS_BEGIN]; track != &state.tracks[NON_BACKUP_TRACKS_END]; ++track)
 		*track = {};
 
+	// Disable music speed-up.
+	state.music_tempo_modifier_master = 0;
+
 	FMSafeZ80Bus z80_bus;
 
 	// FM3/FM6 normal mode, disable timers.
@@ -1621,6 +1624,9 @@ static void Sound_PlayBGM(const unsigned int id)
 	if (music.slower_tempo_on_pal)
 		state.variables.force_pal_tempo = true;
 
+	if (music.ignore_speedup)
+		state.variables.ignore_speedup = true;
+
 	const auto voice_offset = ReadAlignedSignedWord(&header[0]);
 	const Voice* const voices =
 #ifdef SMPS_EnableUniversalVoiceBank
@@ -2179,7 +2185,7 @@ static void DoMusicTempoSpeedup()
 
 	// Handle the tempo modifier, as used by Sonic 3 & Knuckles.
 	// TODO: Backing-up and other stuff from the S&K driver.
-	if (state.music_tempo_modifier_master != 0 && state.music_tempo_modifier-- == 0)
+	if (!state.variables.ignore_speedup && state.music_tempo_modifier_master != 0 && state.music_tempo_modifier-- == 0)
 	{
 		state.music_tempo_modifier = state.music_tempo_modifier_master;
 		UpdateMusic();

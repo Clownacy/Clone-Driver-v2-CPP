@@ -297,6 +297,7 @@ namespace SMPS
 		bool fade_to_previous_pending : 1;
 		bool speedup : 1;
 		bool force_pal_tempo : 1;
+		bool ignore_speedup : 1;
 
 		unsigned char fadeout_counter;
 		unsigned char fadeout_delay;
@@ -359,6 +360,7 @@ namespace SMPS
 		unsigned char speed_up_tempo;
 		bool slower_tempo_on_pal : 1;
 		bool extra_life_jingle : 1;
+		bool ignore_speedup : 1;
 	};
 
 	struct SFX
