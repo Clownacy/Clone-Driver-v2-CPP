@@ -2171,6 +2171,21 @@ static void TempoWait()
 			++track->duration_timeout;
 }
 
+static void UpdateMusic();
+
+static void DoMusicTempoSpeedup()
+{
+	State &state = data->state;
+
+	// Handle the tempo modifier, as used by Sonic 3 & Knuckles.
+	// TODO: Backing-up and other stuff from the S&K driver.
+	if (state.music_tempo_modifier_master != 0 && state.music_tempo_modifier-- == 0)
+	{
+		state.music_tempo_modifier = state.music_tempo_modifier_master;
+		UpdateMusic();
+	}
+}
+
 static void UpdateMusic()
 {
 	State &state = data->state;
@@ -2190,6 +2205,9 @@ static void UpdateMusic()
 		state.tracks[MUSIC_PSG_NOISE].PSGNoiseUpdateTrack();
 #endif
 	TempoWait();
+
+	// Do the speed-up that S&K's driver does in its music update function.
+	DoMusicTempoSpeedup();
 
 	if (state.variables.fade_to_previous_pending)
 	{
@@ -2449,18 +2467,13 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 		--state.spindash_timer;
 #endif
 
+	// Do the speed-up that S&K's driver does in its SFX update function.
+	DoMusicTempoSpeedup();
+
 	// Update the music twice on some frames so that music is the same speed on NTSC and PAL consoles.
 	if (state.pal && !state.variables.force_pal_tempo && --state.variables.pal_audio_countdown == 0)
 	{
 		state.variables.pal_audio_countdown = 5;
-		UpdateMusic();
-	}
-
-	// Handle the tempo modifier, as used by Sonic 3 & Knuckles.
-	// TODO: Backing-up and other stuff from the S&K driver.
-	if (state.music_tempo_modifier_master != 0 && state.music_tempo_modifier-- == 0)
-	{
-		state.music_tempo_modifier = state.music_tempo_modifier_master;
 		UpdateMusic();
 	}
 
