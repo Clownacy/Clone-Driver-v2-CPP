@@ -213,8 +213,12 @@ static void WriteDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigne
 
 static void WriteDACVolume(const unsigned int volume)
 {
-	ClownMDSDK::MainCPU::Z80::Bus z80_bus;
-	WriteDACVolume(z80_bus, volume);
+	ClownMDSDK::MainCPU::Z80::Bus::Lock(
+		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+		{
+			WriteDACVolume(z80_bus, volume);
+		}
+	);
 }
 
 /////////////
@@ -337,8 +341,12 @@ bool Track::CoordFlag(const unsigned int flag)
 
 			if (IsDAC())
 			{
-				ClownMDSDK::MainCPU::Z80::Bus z80_bus;
-				SetDACVolume(z80_bus);
+				ClownMDSDK::MainCPU::Z80::Bus::Lock(
+					[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+					{
+						SetDACVolume(z80_bus);
+					}
+				);
 			}
 			else
 			{
@@ -2068,15 +2076,17 @@ static void Sound_PlayCommand(const unsigned int id)
 		#endif
 
 		case 4: // StopDACSFX
-		{
 #ifdef __MEGA_DRIVE__
-			ClownMDSDK::MainCPU::Z80::Bus z80_bus;
-			z80_bus.RAM(zRequestFlag) = z80_scf_instruction;
-			// 'Stop PCM channel' command value
-			z80_bus.RAM(zRequestChannel2) = 2;
+			ClownMDSDK::MainCPU::Z80::Bus::Lock(
+				[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+				{
+					z80_bus.RAM(zRequestFlag) = z80_scf_instruction;
+					// 'Stop PCM channel' command value
+					z80_bus.RAM(zRequestChannel2) = 2;
+				}
+			);
 #endif
 			break;
-		}
 
 		case 5: // FadeOutMusic
 			state.variables.fadeout_delay = 3;
