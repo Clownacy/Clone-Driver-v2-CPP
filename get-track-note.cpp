@@ -87,6 +87,9 @@ STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, c
 			return note;
 		}
 	}();
-
+#ifdef SMPS_SoundTest
 	return note | (track.IsSoundTest() ? 0x8000 : 0);
+#else
+	return note;
+#endif
 }
