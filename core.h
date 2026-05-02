@@ -19,21 +19,40 @@
 
 namespace SMPS
 {
-	class FMSafeZ80Bus : public ClownMDSDK::MainCPU::Z80::Bus
+	inline auto LockZ80BusFMSafe(const auto &callback)
 	{
-	public:
-#ifdef __MEGA_DRIVE__
-		~FMSafeZ80Bus()
-		{
-			WaitUntilFMReady();
+		return ClownMDSDK::MainCPU::Z80::Bus::Lock(
+			[&](ClownMDSDK::MainCPU::Z80::Bus &bus)
+			{
+				class FMRestorer
+				{
+				private:
+					ClownMDSDK::MainCPU::Z80::Bus &bus;
 
-			asm(
-				"move.b	#0x2A,%0"
-				: "=Qm" (ClownMDSDK::MainCPU::FM::Unsafe::a0)
-			);
-		}
-#endif
-	};
+				public:
+					FMRestorer(ClownMDSDK::MainCPU::Z80::Bus &bus)
+						: bus(bus)
+					{}
+
+			#ifdef __MEGA_DRIVE__
+					~FMRestorer()
+					{
+						bus.WaitUntilFMReady();
+
+						asm(
+							"move.b	#0x2A,%0"
+							: "=Qm" (ClownMDSDK::MainCPU::FM::Unsafe::a0)
+						);
+					}
+			#endif
+				};
+
+				FMRestorer fm_restorer(bus);
+
+				return callback(bus);
+			}
+		);
+	}
 
 	using Voice = std::array<unsigned char, 25>;
 
@@ -88,7 +107,7 @@ namespace SMPS
 		};
 
 		// Generic
-		void WriteFMIorII(FMSafeZ80Bus &z80_bus, unsigned char port, unsigned char value);
+		void WriteFMIorII(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, unsigned char port, unsigned char value);
 		void cfJumpTo();
 		void FinishTrackUpdate();
 		void SetDuration(unsigned int duration);
@@ -106,12 +125,12 @@ namespace SMPS
 		void SetDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 
 		// FM
-		void SendVoiceTLCommon(FMSafeZ80Bus &z80_bus, const Voice &voice, bool force_upload);
-		void SendVoiceTL(FMSafeZ80Bus &z80_bus);
-		void SetVoice(FMSafeZ80Bus &z80_bus);
-		void FMSilenceChannel(FMSafeZ80Bus &z80_bus);
-		void SendFMNoteOff(FMSafeZ80Bus &z80_bus);
-		void FMNoteOff(FMSafeZ80Bus &z80_bus);
+		void SendVoiceTLCommon(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const Voice &voice, bool force_upload);
+		void SendVoiceTL(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void SetVoice(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void FMSilenceChannel(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void SendFMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void FMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 		void FMNoteOff();
 		void FMUpdateTrack();
 		void DoModulation();
