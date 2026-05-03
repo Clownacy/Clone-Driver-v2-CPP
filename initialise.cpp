@@ -15,7 +15,7 @@ static State* const state = &data->state;
 #endif
 
 static const auto dac_driver = std::to_array<unsigned char>({
-	#include "dac/DAC-Driver.sax.h"
+	#embed "dac/DAC-Driver.sax"
 });
 
 STARTING_FUNCTION void SMPS::Initialise()
