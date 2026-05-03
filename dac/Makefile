@@ -3,7 +3,7 @@
 all: DAC-Driver.sax
 
 %.p: %.asm
-	asl -c -q $< -o $@
+	asl -c -L -q $< -o $@
 
 %.bin: %.p
 	p2bin -q $< $@
