@@ -20,16 +20,13 @@ static const auto dac_driver = std::to_array<unsigned char>({
 
 STARTING_FUNCTION void SMPS::Initialise()
 {
-	const auto previous_interrupt_mask = ClownMDSDK::MainCPU::M68k::DisableInterrupts();
 	ClownMDSDK::MainCPU::Z80::Unsafe::DeassertReset();
-	ClownMDSDK::MainCPU::Z80::Unsafe::RequestBus();
-	ClownMDSDK::MainCPU::Z80::Unsafe::WaitUntilBusObtained();
-
-	state->pal = ClownMDSDK::MainCPU::Unsafe::IsPAL();
-
-	ClownLZSS::SaxmanDecompress(std::begin(dac_driver), std::end(dac_driver), std::begin(ClownMDSDK::MainCPU::Z80::Unsafe::ram));
-
-	ClownMDSDK::MainCPU::Z80::Reset();
-	ClownMDSDK::MainCPU::Z80::Unsafe::ReleaseBus();
-	ClownMDSDK::MainCPU::M68k::SetInterruptMask(previous_interrupt_mask);
+	ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
+		[](auto &bus)
+		{
+			state->pal = bus.IsConsolePAL();
+			ClownLZSS::SaxmanDecompress(std::begin(dac_driver), std::end(dac_driver), std::begin(bus.RAM()));
+			ClownMDSDK::MainCPU::Z80::Reset();
+		}
+	);
 }
