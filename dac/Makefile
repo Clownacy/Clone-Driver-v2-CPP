@@ -9,4 +9,4 @@ all: DAC-Driver.sax
 	p2bin -q $< $@
 
 %.sax: %.bin
-	clownlzss -s $< $@
+	clownlzss -sn $< $@
