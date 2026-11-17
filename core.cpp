@@ -219,7 +219,7 @@ static void WriteDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigne
 
 static void WriteDACVolume(const unsigned int volume)
 {
-	ClownMDSDK::MainCPU::Z80::Bus::Lock(
+	ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
 			WriteDACVolume(z80_bus, volume);
@@ -351,7 +351,7 @@ bool Track::CoordFlag(const unsigned int flag)
 
 			if (IsDAC())
 			{
-				ClownMDSDK::MainCPU::Z80::Bus::Lock(
+				ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
 					[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 					{
 						SetDACVolume(z80_bus);
@@ -2126,7 +2126,7 @@ static void Sound_PlayCommand(const unsigned int id)
 
 		case 4: // StopDACSFX
 #ifdef __MEGA_DRIVE__
-			ClownMDSDK::MainCPU::Z80::Bus::Lock(
+			ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
 				[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 				{
 					z80_bus.RAM(zRequestFlag) = z80_scf_instruction;

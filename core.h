@@ -21,7 +21,7 @@ namespace SMPS
 {
 	inline auto LockZ80BusFMSafe(const auto &callback)
 	{
-		return ClownMDSDK::MainCPU::Z80::Bus::Lock(
+		return ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
 			[&](ClownMDSDK::MainCPU::Z80::Bus &bus)
 			{
 				class FMRestorer
