@@ -39,8 +39,7 @@ public:
 		}(), ...);
 	}
 
-	template<typename Self>
-	constexpr auto operator[](this Self &&self, const std::size_t index)
+	constexpr auto operator[](this auto &&self, const std::size_t index)
 	{
 		return &self.data[self.offsets[index]];
 	}
