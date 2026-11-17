@@ -478,7 +478,6 @@ namespace SMPS
 #ifdef SMPS_EnableUniversalVoiceBank
 		const Voice *universal_voice_bank;
 #endif
-		State &state;
 	};
 
 	#ifndef BINARY_BLOB

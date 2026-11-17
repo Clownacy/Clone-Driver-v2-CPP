@@ -1,7 +1,7 @@
 	include /opt/clownmdsdk/generic.mk
 
 CXXFLAGS += -O3 -Wall -Wextra -Wpedantic -ffixed-a5 -std=gnu++26 -mpcrel -flto -fvisibility=hidden -DBINARY_BLOB -DNDEBUG
-LDFLAGS += -save-temps=obj -shared -Wl,-shared
+LDFLAGS += -save-temps=obj -shared -Wl,-shared -Wl,--orphan-handling=discard
 
 all: output/core.bin output/get-track-note.bin output/initialise.bin output/exports.asm
 

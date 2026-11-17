@@ -12,7 +12,11 @@ using namespace SMPS;
 #endif
 
 #ifdef BINARY_BLOB
-register Data* data asm("a5");
+// The data is expected to come directly after this binary blob.
+Data data __attribute__ ((section (".driver_data"))) = {};
+
+// RAM is provided in a register.
+register State* state asm("a5");
 #endif
 
 #include "common.h"
@@ -140,14 +144,12 @@ static void SilenceAll(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 
 static void StopAllSound()
 {
-	State &state = data->state;
-
-	state.variables = {};
-	for (Track *track = &state.tracks[NON_BACKUP_TRACKS_BEGIN]; track != &state.tracks[NON_BACKUP_TRACKS_END]; ++track)
+	state->variables = {};
+	for (Track *track = &state->tracks[NON_BACKUP_TRACKS_BEGIN]; track != &state->tracks[NON_BACKUP_TRACKS_END]; ++track)
 		*track = {};
 
 	// Disable music speed-up.
-	state.music_tempo_modifier_master = 0;
+	state->music_tempo_modifier_master = 0;
 
 	LockZ80BusFMSafe(
 		[](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -162,7 +164,7 @@ static void StopAllSound()
 
 static const DACSample& GetDACSampleMetadata(const unsigned int id)
 {
-	return data->dac.list[id];
+	return data.dac.list[id];
 }
 
 static void SendDACSampleRequest(ClownMDSDK::MainCPU::Z80::Bus &bus, const unsigned int channel, const DACSample &sample)
@@ -184,10 +186,8 @@ static void SendDACSampleRequest(ClownMDSDK::MainCPU::Z80::Bus &bus, const unsig
 
 static void PlayDACSFX(const unsigned int dac_channel, const unsigned int dac_index)
 {
-	State &state = data->state;
-
-	state.tracks[MUSIC_DAC].SetFM6Overridden(true);
-	state.tracks[MUSIC_FM6].SetFM6Overridden(true);
+	state->tracks[MUSIC_DAC].SetFM6Overridden(true);
+	state->tracks[MUSIC_FM6].SetFM6Overridden(true);
 
 	const auto &sample = GetDACSampleMetadata(dac_index);
 
@@ -283,8 +283,6 @@ void Track::SetDuration(const unsigned int duration)
 
 bool Track::CoordFlag(const unsigned int flag)
 {
-	State &state = data->state;
-
 	if (flag == 0xFE) // cfHoldNote
 	{
 		SetHeld(true);
@@ -319,7 +317,7 @@ bool Track::CoordFlag(const unsigned int flag)
 			break;
 
 		case 2: // cfSetCommunication
-			state.variables.communication_byte = *data_pointer++;
+			state->variables.communication_byte = *data_pointer++;
 			break;
 
 		case 3: // cfJumpReturn
@@ -328,7 +326,7 @@ bool Track::CoordFlag(const unsigned int flag)
 
 		case 4: // cfFadeInToPrevious
 			// We must handle this later to prevent the DAC channel from desynchronising.
-			state.variables.fade_to_previous_pending = true;
+			state->variables.fade_to_previous_pending = true;
 			return false;
 
 		case 5: // cfSetTempoDivider
@@ -381,10 +379,10 @@ bool Track::CoordFlag(const unsigned int flag)
 				{
 					FMNoteOff(z80_bus);
 
-					if (state.tracks[SFX_FM4].IsPlaying())
+					if (state->tracks[SFX_FM4].IsPlaying())
 						return false;
 
-					Track &music_fm4 = state.tracks[MUSIC_FM4];
+					Track &music_fm4 = state->tracks[MUSIC_FM4];
 					music_fm4.SetOverridden(false);
 					music_fm4.SetResting(true);
 
@@ -406,14 +404,14 @@ bool Track::CoordFlag(const unsigned int flag)
 			break;
 
 		case 0xA: // cfSetTempo
-			state.variables.main_tempo = state.variables.main_tempo_timeout = *data_pointer++;
+			state->variables.main_tempo = state->variables.main_tempo_timeout = *data_pointer++;
 			break;
 
 		case 0xB: // cfSetTempoDividerAll
 		{
 			const unsigned char value = *data_pointer++;
 
-			for (Track *track = &state.tracks[MUSIC_BEGIN]; track != &state.tracks[MUSIC_END]; ++track)
+			for (Track *track = &state->tracks[MUSIC_BEGIN]; track != &state->tracks[MUSIC_END]; ++track)
 				track->tempo_divider = value;
 
 			break;
@@ -482,13 +480,13 @@ bool Track::CoordFlag(const unsigned int flag)
 			if (IsMusic())
 				return false;
 
-			state.variables.sndprio = 0;
+			state->variables.sndprio = 0;
 
 			if (!IsPSG())
 			{
 				Track *track;
 #ifdef SMPS_EnableSpecSFX
-				auto &special_fm4 = state.tracks[SPECIAL_SFX_FM4];
+				auto &special_fm4 = state->tracks[SPECIAL_SFX_FM4];
 
 				if (voice_control == 4 && special_fm4.IsPlaying())
 				{
@@ -497,7 +495,7 @@ bool Track::CoordFlag(const unsigned int flag)
 				else
 #endif
 				{
-					track = &state.tracks[SFX_BGMChannelRAM[voice_control - 2]];
+					track = &state->tracks[SFX_BGMChannelRAM[voice_control - 2]];
 
 					if (!track->IsPlaying())
 						return false;
@@ -517,13 +515,13 @@ bool Track::CoordFlag(const unsigned int flag)
 			{
 				Track *track;
 #ifdef SMPS_EnableSpecSFX
-				auto &special_psg3 = state.tracks[SPECIAL_SFX_PSG3];
+				auto &special_psg3 = state->tracks[SPECIAL_SFX_PSG3];
 
 				if ((voice_control == 0xC0 || voice_control == 0xE0) && special_psg3.IsPlaying())
 					track = &special_psg3;
 				else
 #endif
-					track = &state.tracks[SFX_BGMChannelRAM[voice_control >> 5]]; // TODO: Cast to unsigned integer?
+					track = &state->tracks[SFX_BGMChannelRAM[voice_control >> 5]]; // TODO: Cast to unsigned integer?
 
 				track->SetOverridden(false);
 				track->SetResting(true);
@@ -614,7 +612,7 @@ bool Track::CoordFlag(const unsigned int flag)
 			break;
 
 		case 0x1A: // cfPlaySound
-			state.variables.queue[1] = *data_pointer++;
+			state->variables.queue[1] = *data_pointer++;
 			break;
 
 		case 0x1B: // cfSetKey
@@ -650,15 +648,15 @@ bool Track::CoordFlag(const unsigned int flag)
 
 		case 0x1E: // cfLoopContinuousSFX
 #ifdef SMPS_EnableContSFX
-			if (!state.continuous_sfx)
+			if (!state->continuous_sfx)
 			{
-				state.variables.current_contsfx = 0;
+				state->variables.current_contsfx = 0;
 				data_pointer += 2;
 			}
 			else
 			{
-				if (--state.variables.contsfx_channels == 0)
-					state.continuous_sfx = false;
+				if (--state->variables.contsfx_channels == 0)
+					state->continuous_sfx = false;
 
 				cfJumpTo();
 			}
@@ -669,7 +667,7 @@ bool Track::CoordFlag(const unsigned int flag)
 
 		case 0x1F: // cfClearPush
 #ifdef SMPS_PushSFXBehaviour
-			state.push_playing = false;
+			state->push_playing = false;
 #endif
 			break;
 
@@ -704,7 +702,7 @@ bool Track::CoordFlag(const unsigned int flag)
 
 		case 0x23: // cfChangePSGDrumVolume
 #ifdef SMPS_EnablePSGNoiseDrums
-			state.variables.psg_drum_volume = (state.variables.psg_drum_volume + *data_pointer++) & (0xF << 3);
+			state->variables.psg_drum_volume = (state->variables.psg_drum_volume + *data_pointer++) & (0xF << 3);
 #else
 			++data_pointer;
 #endif
@@ -833,7 +831,7 @@ std::optional<unsigned int> Track::DoModulationEnvelope()
 
 bool Track::IsMusic() const
 {
-	return this < &data->state.tracks[SFX_BEGIN];
+	return this < &state->tracks[SFX_BEGIN];
 }
 
 void Track::ReloadModulationData()
@@ -865,14 +863,12 @@ void Track::DACUpdateSample()
 	if (saved_dac == 0x80)
 		return;
 
-	State &state = data->state;
-
 	const auto &sample = GetDACSampleMetadata(saved_dac - 0x81);
 
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			if (state.tracks[MUSIC_DAC].IsFM6Overridden())
+			if (state->tracks[MUSIC_DAC].IsFM6Overridden())
 			{
 				z80_bus.WriteFMI(0x2B, 0x80);
 				z80_bus.WriteFMII(0xB6, ams_fms_pan);
@@ -882,10 +878,10 @@ void Track::DACUpdateSample()
 		}
 	);
 
-	if (state.tracks[MUSIC_DAC].IsFM6Overridden())
+	if (state->tracks[MUSIC_DAC].IsFM6Overridden())
 	{
-		state.tracks[MUSIC_DAC].SetFM6Overridden(false);
-		state.tracks[MUSIC_FM6].SetFM6Overridden(true);
+		state->tracks[MUSIC_DAC].SetFM6Overridden(false);
+		state->tracks[MUSIC_FM6].SetFM6Overridden(true);
 	}
 
 #ifdef SMPS_SoundTest
@@ -943,9 +939,7 @@ void Track::DACUpdateTrack()
 
 void Track::SetDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 {
-	State &state = data->state;
-	
-	WriteDACVolume(z80_bus, std::min(0x7F, state.variables.fadein_counter * 4 + volume) / 8);
+	WriteDACVolume(z80_bus, std::min(0x7F, state->variables.fadein_counter * 4 + volume) / 8);
 }
 
 ////////
@@ -954,7 +948,7 @@ void Track::SetDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 
 void Track::SendVoiceTLCommon(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const Voice &voice, const bool force_upload)
 {
-	const unsigned int base_volume = std::min(0x7FU, volume + static_cast<unsigned int>(data->state.variables.fadein_counter) * 2);
+	const unsigned int base_volume = std::min(0x7FU, volume + static_cast<unsigned int>(state->variables.fadein_counter) * 2);
 
 	for (unsigned int i = 0; i < 4; ++i)
 	{
@@ -1194,8 +1188,6 @@ bool Track::FMDoNext()
 
 void Track::FMNoteOn()
 {
-	State &state = data->state;
-
 	if (IsOverridden())
 		return;
 
@@ -1214,8 +1206,8 @@ void Track::FMNoteOn()
 
 	if (voice_control == 6 && IsFM6Overridden())
 	{
-		state.tracks[MUSIC_FM6].SetFM6Overridden(false);
-		state.tracks[MUSIC_DAC].SetFM6Overridden(true);
+		state->tracks[MUSIC_FM6].SetFM6Overridden(false);
+		state->tracks[MUSIC_DAC].SetFM6Overridden(true);
 	}
 }
 
@@ -1426,7 +1418,7 @@ bool Track::PSGDoVolFX()
 
 	if (voice_index != 0)
 	{
-		const auto envelope = data->psg.list[voice_index - 1];
+		const auto envelope = data.psg.list[voice_index - 1];
 
 		for (;;)
 		{
@@ -1470,7 +1462,7 @@ void Track::SetPSGVolume(const unsigned int psg_volume)
 	if (IsHeld() && note_timeout_master != 0 && note_timeout == 0)
 		return;
 
-	ClownMDSDK::MainCPU::PSG::Write(0x10 | voice_control | std::min(0xFU, (psg_volume + data->state.variables.fadein_counter * 4) >> 3));
+	ClownMDSDK::MainCPU::PSG::Write(0x10 | voice_control | std::min(0xFU, (psg_volume + state->variables.fadein_counter * 4) >> 3));
 }
 
 void Track::SendPSGNoteOff()
@@ -1496,22 +1488,20 @@ void Track::PSGNoteOff()
 #ifdef SMPS_EnablePSGNoiseDrums
 void Track::PSGNoiseSetDrumNote(const unsigned char note)
 {
-	State &state = data->state;
-
 	if (note < 0x81)
 	{
 		PSGNoteOff();
 		return;
 	}
 
-	auto &drum = data->psg_noise_drums.list[note - 0x81];
+	auto &drum = data.psg_noise_drums.list[note - 0x81];
 
 #ifdef SMPS_SoundTest
 	freq = note;
 #endif
 
 	voice_index = drum.volume_envelope;
-	volume = state.variables.psg_drum_volume + (drum.volume << 3);
+	volume = state->variables.psg_drum_volume + (drum.volume << 3);
 
 	if (IsOverridden())
 		return;
@@ -1582,27 +1572,25 @@ void Track::PSGNoiseUpdateTrack()
 
 static void InitMusicPlayback()
 {
-	State &state = data->state;
-
 	// Save several values.
-	const auto sndprio = state.variables.sndprio;
-	const auto playing_1up = state.variables.playing_1up;
-	const auto speedup = state.variables.speedup;
-	const auto fadein_counter = state.variables.fadein_counter;
-	const auto queue = state.variables.queue;
+	const auto sndprio = state->variables.sndprio;
+	const auto playing_1up = state->variables.playing_1up;
+	const auto speedup = state->variables.speedup;
+	const auto fadein_counter = state->variables.fadein_counter;
+	const auto queue = state->variables.queue;
 
 	// Clear variables.
-	state.variables = {};
+	state->variables = {};
 
 	// Restore the values saved above.
-	state.variables.sndprio = sndprio;
-	state.variables.playing_1up = playing_1up;
-	state.variables.speedup = speedup;
-	state.variables.fadein_counter = fadein_counter;
-	state.variables.queue = queue;
+	state->variables.sndprio = sndprio;
+	state->variables.playing_1up = playing_1up;
+	state->variables.speedup = speedup;
+	state->variables.fadein_counter = fadein_counter;
+	state->variables.queue = queue;
 
 	// Clear music track RAM.
-	for (Track *track = &state.tracks[MUSIC_BEGIN]; track != &state.tracks[MUSIC_END]; ++track)
+	for (Track *track = &state->tracks[MUSIC_BEGIN]; track != &state->tracks[MUSIC_END]; ++track)
 		*track = {};
 
 	// Reset DAC volume.
@@ -1629,24 +1617,22 @@ static void InitMusicPlayback()
 		#endif
 		};
 
-		Track &track = state.tracks[MUSIC_BEGIN + i];
+		Track &track = state->tracks[MUSIC_BEGIN + i];
 		track.voice_control = ChannelInitBytes[i];
 	}
 }
 
 static void Sound_PlayBGM(const unsigned int id)
 {
-	State &state = data->state;
-
-	const Music &music = data->music.list[id];
+	const Music &music = data.music.list[id];
 
 	if (music.extra_life_jingle)
 	{
-		if (!state.variables.playing_1up)
+		if (!state->variables.playing_1up)
 		{
-			state.variables.playing_1up = true;
+			state->variables.playing_1up = true;
 
-			for (Track *track = &state.tracks[MUSIC_BEGIN]; track != &state.tracks[MUSIC_END]; ++track)
+			for (Track *track = &state->tracks[MUSIC_BEGIN]; track != &state->tracks[MUSIC_END]; ++track)
 			{
 				// Back-up the 'is playing' flag to the 'is overridden' flag.
 				track->SetOverridden(track->IsPlaying());
@@ -1655,35 +1641,35 @@ static void Sound_PlayBGM(const unsigned int id)
 				track->SetPlaying(false);
 			}
 
-			state.variables.sndprio = 0;
+			state->variables.sndprio = 0;
 
-			std::copy(&state.tracks[MUSIC_BEGIN], &state.tracks[MUSIC_END], &state.tracks[BACKUP_BEGIN]);
-			state.variables_backup = state.variables;
+			std::copy(&state->tracks[MUSIC_BEGIN], &state->tracks[MUSIC_END], &state->tracks[BACKUP_BEGIN]);
+			state->variables_backup = state->variables;
 		}
 	}
 	else
 	{
-		state.variables.fadein_counter = 0;
-		state.variables.fadeout_counter = 0;
-		state.variables.playing_1up = false;
+		state->variables.fadein_counter = 0;
+		state->variables.fadeout_counter = 0;
+		state->variables.playing_1up = false;
 	}
 
 	InitMusicPlayback();
 
 	const unsigned char* const header = music.data;
-	state.variables.speeduptempo = music.speed_up_tempo;
+	state->variables.speeduptempo = music.speed_up_tempo;
 
 	if (music.slower_tempo_on_pal)
-		state.variables.force_pal_tempo = true;
+		state->variables.force_pal_tempo = true;
 
 	if (music.ignore_speedup)
-		state.variables.ignore_speedup = true;
+		state->variables.ignore_speedup = true;
 
 	const auto voice_offset = ReadAlignedSignedWord(&header[0]);
 	const Voice* const voices =
 #ifdef SMPS_EnableUniversalVoiceBank
 		voice_offset == 0
-		? data->universal_voice_bank
+		? data.universal_voice_bank
 		:
 #endif
 		reinterpret_cast<const Voice*>(&header[voice_offset]);
@@ -1697,12 +1683,12 @@ static void Sound_PlayBGM(const unsigned int id)
 	const unsigned char tempo_mod = header[7];
 	const unsigned char *track_header = &header[8];
 
-	state.variables.tempo_mod = tempo_mod;
-	state.variables.main_tempo = state.variables.speedup ? state.variables.speeduptempo : state.variables.tempo_mod;
-	state.variables.main_tempo_timeout = 0;
-	state.variables.pal_audio_countdown = 5;
+	state->variables.tempo_mod = tempo_mod;
+	state->variables.main_tempo = state->variables.speedup ? state->variables.speeduptempo : state->variables.tempo_mod;
+	state->variables.main_tempo_timeout = 0;
+	state->variables.pal_audio_countdown = 5;
 
-	for (Track *track = &state.tracks[MUSIC_FM_DAC_BEGIN]; track != &state.tracks[MUSIC_FM_DAC_BEGIN + total_dac_and_fm_tracks]; ++track)
+	for (Track *track = &state->tracks[MUSIC_FM_DAC_BEGIN]; track != &state->tracks[MUSIC_FM_DAC_BEGIN + total_dac_and_fm_tracks]; ++track)
 	{
 		track->SetPlaying(true);
 		track->tempo_divider = tempo_divider;
@@ -1717,10 +1703,10 @@ static void Sound_PlayBGM(const unsigned int id)
 		track_header += 4;
 	}
 
-	state.tracks[MUSIC_DAC].SetFM6Overridden(true);
-	state.tracks[MUSIC_FM6].SetFM6Overridden(true);
+	state->tracks[MUSIC_DAC].SetFM6Overridden(true);
+	state->tracks[MUSIC_FM6].SetFM6Overridden(true);
 
-	for (Track *track = &state.tracks[MUSIC_PSG_BEGIN]; track != &state.tracks[MUSIC_PSG_BEGIN + total_psg_tracks]; ++track)
+	for (Track *track = &state->tracks[MUSIC_PSG_BEGIN]; track != &state->tracks[MUSIC_PSG_BEGIN + total_psg_tracks]; ++track)
 	{
 		track->SetPlaying(true);
 		track->tempo_divider = tempo_divider;
@@ -1738,7 +1724,7 @@ static void Sound_PlayBGM(const unsigned int id)
 	}
 
 #ifdef SMPS_EnablePWM
-	for (Track *track = &state.tracks[MUSIC_PWM_BEGIN]; track != &state.tracks[MUSIC_PWM_BEGIN + total_pwm_tracks]; ++track)
+	for (Track *track = &state->tracks[MUSIC_PWM_BEGIN]; track != &state->tracks[MUSIC_PWM_BEGIN + total_pwm_tracks]; ++track)
 	{
 		track->SetPlaying(true);
 		track->tempo_divider = tempo_divider;
@@ -1752,28 +1738,28 @@ static void Sound_PlayBGM(const unsigned int id)
 	}
 #endif
 
-	for (Track *track = &state.tracks[SFX_BEGIN]; track != &state.tracks[SFX_END]; ++track)
+	for (Track *track = &state->tracks[SFX_BEGIN]; track != &state->tracks[SFX_END]; ++track)
 		if (track->IsPlaying())
-			state.tracks[SFX_BGMChannelRAM[track->IsPSG() ? track->voice_control >> 5 : track->voice_control - 2]].SetOverridden(true);
+			state->tracks[SFX_BGMChannelRAM[track->IsPSG() ? track->voice_control >> 5 : track->voice_control - 2]].SetOverridden(true);
 
 #ifdef SMPS_EnableSpecSFX
-	if (state.tracks[SPECIAL_SFX_FM4].IsPlaying())
-		state.tracks[MUSIC_FM4].SetOverridden(true);
+	if (state->tracks[SPECIAL_SFX_FM4].IsPlaying())
+		state->tracks[MUSIC_FM4].SetOverridden(true);
 
-	if (state.tracks[SPECIAL_SFX_PSG3].IsPlaying())
-		state.tracks[MUSIC_PSG3].SetOverridden(true);
+	if (state->tracks[SPECIAL_SFX_PSG3].IsPlaying())
+		state->tracks[MUSIC_PSG3].SetOverridden(true);
 #endif
 
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			for (Track *track = &state.tracks[MUSIC_FM_BEGIN]; track != &state.tracks[MUSIC_FM_END]; ++track)
+			for (Track *track = &state->tracks[MUSIC_FM_BEGIN]; track != &state->tracks[MUSIC_FM_END]; ++track)
 				if (!track->IsOverridden())
 					track->FMSilenceChannel(z80_bus);
 		}
 	);
 
-	for (Track *track = &state.tracks[MUSIC_PSG_BEGIN]; track != &state.tracks[MUSIC_PSG_END]; ++track)
+	for (Track *track = &state->tracks[MUSIC_PSG_BEGIN]; track != &state->tracks[MUSIC_PSG_END]; ++track)
 		track->PSGNoteOff();
 
 #ifdef SMPS_EnablePWM
@@ -1783,19 +1769,17 @@ static void Sound_PlayBGM(const unsigned int id)
 
 static void Sound_PlaySFX(const unsigned int id)
 {
-	State &state = data->state;
-
-	if (state.variables.playing_1up)
+	if (state->variables.playing_1up)
 	{
-		state.variables.sndprio = 0;
+		state->variables.sndprio = 0;
 		return;
 	}
 
 #ifdef SMPS_EnableSpinDashSFX
-	state.spindash_lastsound = false;
+	state->spindash_lastsound = false;
 #endif
 
-	const SFX &sfx = data->sfx.list[id];
+	const SFX &sfx = data.sfx.list[id];
 
 	const unsigned char* const header = sfx.data;
 
@@ -1811,18 +1795,18 @@ static void Sound_PlaySFX(const unsigned int id)
 
 	#ifdef SMPS_PushSFXBehaviour
 		case SFX::Type::BlockPush:
-			if (state.push_playing)
+			if (state->push_playing)
 				return;
 
-			state.push_playing = true;
+			state->push_playing = true;
 			break;
 	#endif
 
 	#ifdef SMPS_GloopSFXBehaviour
 		case SFX::Type::Gloop:
-			state.gloop_toggle = !state.gloop_toggle;
+			state->gloop_toggle = !state->gloop_toggle;
 
-			if (!state.gloop_toggle)
+			if (!state->gloop_toggle)
 				return;
 
 			break;
@@ -1831,29 +1815,29 @@ static void Sound_PlaySFX(const unsigned int id)
 	#ifdef SMPS_EnableSpinDashSFX
 		case SFX::Type::SpinDashRev:
 		{
-			const unsigned int pitch = state.spindash_timer == 0 ? 0 : state.spindash_pitch + 1;
+			const unsigned int pitch = state->spindash_timer == 0 ? 0 : state->spindash_pitch + 1;
 
 			if (pitch < 12)
-				state.spindash_pitch = pitch;
+				state->spindash_pitch = pitch;
 
-			state.spindash_lastsound = true;
-			state.spindash_timer = 60;
+			state->spindash_lastsound = true;
+			state->spindash_timer = 60;
 			break;
 		}
 	#endif
 
 	#ifdef SMPS_EnableContSFX
 		case SFX::Type::Continuous:
-			if (id == state.variables.current_contsfx)
+			if (id == state->variables.current_contsfx)
 			{
-				state.continuous_sfx = true;
-				state.variables.contsfx_channels = total_tracks;
+				state->continuous_sfx = true;
+				state->variables.contsfx_channels = total_tracks;
 				return;
 			}
 			else
 			{
-				state.continuous_sfx = false;
-				state.variables.current_contsfx = id;
+				state->continuous_sfx = false;
+				state->variables.current_contsfx = id;
 			}
 
 			break;
@@ -1869,13 +1853,13 @@ static void Sound_PlaySFX(const unsigned int id)
 		{
 			// FM
 			track_lookup_index = voice_control - 2;
-			state.tracks[SFX_BGMChannelRAM[track_lookup_index]].SetOverridden(true);
+			state->tracks[SFX_BGMChannelRAM[track_lookup_index]].SetOverridden(true);
 		}
 		else
 		{
 			// PSG
 			track_lookup_index = voice_control >> 5; // TODO: Cast to unsigned integer?
-			state.tracks[SFX_BGMChannelRAM[track_lookup_index]].SetOverridden(true);
+			state->tracks[SFX_BGMChannelRAM[track_lookup_index]].SetOverridden(true);
 
 			// Silence PSG channel.
 			ClownMDSDK::MainCPU::PSG::Write(voice_control | 0x1F);
@@ -1885,7 +1869,7 @@ static void Sound_PlaySFX(const unsigned int id)
 				ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F);
 		}
 
-		auto &track = state.tracks[SFX_SFXChannelRAM[track_lookup_index]];
+		auto &track = state->tracks[SFX_SFXChannelRAM[track_lookup_index]];
 
 		track = {};
 
@@ -1898,8 +1882,8 @@ static void Sound_PlaySFX(const unsigned int id)
 		track.duration_timeout = 1;
 
 #ifdef SMPS_EnableSpinDashSFX
-		if (state.spindash_lastsound)
-			track.transpose += state.spindash_pitch;
+		if (state->spindash_lastsound)
+			track.transpose += state->spindash_pitch;
 #endif
 
 		track.stack_pointer = track.go_sub_stack.size();
@@ -1914,23 +1898,21 @@ static void Sound_PlaySFX(const unsigned int id)
 	}
 
 #ifdef SMPS_EnableSpecSFX
-	if (state.tracks[SFX_FM4].IsPlaying())
-		state.tracks[SPECIAL_SFX_FM4].SetOverridden(true);
+	if (state->tracks[SFX_FM4].IsPlaying())
+		state->tracks[SPECIAL_SFX_FM4].SetOverridden(true);
 
-	if (state.tracks[SFX_PSG3].IsPlaying())
-		state.tracks[SPECIAL_SFX_PSG3].SetOverridden(true);
+	if (state->tracks[SFX_PSG3].IsPlaying())
+		state->tracks[SPECIAL_SFX_PSG3].SetOverridden(true);
 #endif
 }
 
 #ifdef SMPS_EnableSpecSFX
 static void Sound_PlaySpecial(const unsigned int id)
 {
-	State &state = data->state;
-
-	if (state.variables.playing_1up)
+	if (state->variables.playing_1up)
 		return;
 
-	const unsigned char* const header = data->background_sfx.list[id].data;
+	const unsigned char* const header = data.background_sfx.list[id].data;
 
 	const Voice* const voices = reinterpret_cast<const Voice*>(&header[ReadAlignedSignedWord(header)]);
 
@@ -1947,14 +1929,14 @@ static void Sound_PlaySpecial(const unsigned int id)
 			if (voice_control < 0x80)
 			{
 				// FM
-				state.tracks[MUSIC_FM4].SetOverridden(true);
-				return state.tracks[SPECIAL_SFX_FM4];
+				state->tracks[MUSIC_FM4].SetOverridden(true);
+				return state->tracks[SPECIAL_SFX_FM4];
 			}
 			else
 			{
 				// PSG
-				state.tracks[MUSIC_PSG3].SetOverridden(true);
-				return state.tracks[SPECIAL_SFX_PSG3];
+				state->tracks[MUSIC_PSG3].SetOverridden(true);
+				return state->tracks[SPECIAL_SFX_PSG3];
 			}
 		}();
 
@@ -1978,13 +1960,13 @@ static void Sound_PlaySpecial(const unsigned int id)
 		track_header += 6;
 	}
 
-	if (state.tracks[SFX_FM4].IsPlaying())
-		state.tracks[SPECIAL_SFX_FM4].SetOverridden(true);
+	if (state->tracks[SFX_FM4].IsPlaying())
+		state->tracks[SPECIAL_SFX_FM4].SetOverridden(true);
 
-	if (state.tracks[SFX_PSG3].IsPlaying())
-		state.tracks[SPECIAL_SFX_PSG3].SetOverridden(true);
+	if (state->tracks[SFX_PSG3].IsPlaying())
+		state->tracks[SPECIAL_SFX_PSG3].SetOverridden(true);
 
-	if (!state.tracks[SFX_PSG3].IsPlaying())
+	if (!state->tracks[SFX_PSG3].IsPlaying())
 	{
 		ClownMDSDK::MainCPU::PSG::Write(0xC0 | 0x1F);
 		ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F);
@@ -1999,8 +1981,6 @@ static void Sound_PlayDAC(const unsigned int id)
 
 static void Sound_PlayCommand(const unsigned int id)
 {
-	State &state = data->state;
-
 	switch (id)
 	{
 		case 1: // StopAllSound
@@ -2008,12 +1988,12 @@ static void Sound_PlayCommand(const unsigned int id)
 			break;
 
 		case 2: // StopSFX
-			state.variables.sndprio = false;
+			state->variables.sndprio = false;
 
 			LockZ80BusFMSafe(
 				[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 				{
-					for (Track *track = &state.tracks[SFX_FM_BEGIN]; track != &state.tracks[SFX_FM_END]; ++track)
+					for (Track *track = &state->tracks[SFX_FM_BEGIN]; track != &state->tracks[SFX_FM_END]; ++track)
 					{
 						if (track->IsPlaying())
 						{
@@ -2025,11 +2005,11 @@ static void Sound_PlayCommand(const unsigned int id)
 							Track &other_track =
 
 							#ifdef SMPS_EnableSpecSFX
-								track->voice_control == 4 && state.tracks[SPECIAL_SFX_FM4].IsPlaying()
-								? state.tracks[SPECIAL_SFX_FM4]
+								track->voice_control == 4 && state->tracks[SPECIAL_SFX_FM4].IsPlaying()
+								? state->tracks[SPECIAL_SFX_FM4]
 								:
 							#endif
-								state.tracks[SFX_BGMChannelRAM[track->voice_control - 2]];
+								state->tracks[SFX_BGMChannelRAM[track->voice_control - 2]];
 
 							if (other_track.IsOverridden())
 							{
@@ -2042,7 +2022,7 @@ static void Sound_PlayCommand(const unsigned int id)
 				}
 			);
 
-			for (Track *track = &state.tracks[SFX_PSG_BEGIN]; track != &state.tracks[SFX_PSG_END]; ++track)
+			for (Track *track = &state->tracks[SFX_PSG_BEGIN]; track != &state->tracks[SFX_PSG_END]; ++track)
 			{
 				if (track->IsPlaying())
 				{
@@ -2054,11 +2034,11 @@ static void Sound_PlayCommand(const unsigned int id)
 					Track &other_track =
 
 					#ifdef SMPS_EnableSpecSFX
-						(track->voice_control == 0xC0 || track->voice_control == 0xE0) && state.tracks[SPECIAL_SFX_PSG3].IsPlaying()
-						? state.tracks[SPECIAL_SFX_PSG3]
+						(track->voice_control == 0xC0 || track->voice_control == 0xE0) && state->tracks[SPECIAL_SFX_PSG3].IsPlaying()
+						? state->tracks[SPECIAL_SFX_PSG3]
 						:
 					#endif
-						state.tracks[SFX_BGMChannelRAM[track->voice_control >> 5]];
+						state->tracks[SFX_BGMChannelRAM[track->voice_control >> 5]];
 
 					if (other_track.IsOverridden())
 					{
@@ -2076,7 +2056,7 @@ static void Sound_PlayCommand(const unsigned int id)
 	#ifdef SMPS_EnableSpecSFX
 		case 3: // SpecStopSFX
 		{
-			Track &background_sfx_fm4 = state.tracks[SPECIAL_SFX_FM4];
+			Track &background_sfx_fm4 = state->tracks[SPECIAL_SFX_FM4];
 
 			if (background_sfx_fm4.IsPlaying())
 			{
@@ -2089,7 +2069,7 @@ static void Sound_PlayCommand(const unsigned int id)
 						{
 							background_sfx_fm4.SendFMNoteOff(z80_bus);
 
-							Track &music_fm4 = state.tracks[MUSIC_FM4];
+							Track &music_fm4 = state->tracks[MUSIC_FM4];
 							music_fm4.SetOverridden(false);
 							music_fm4.SetResting(true);
 
@@ -2100,7 +2080,7 @@ static void Sound_PlayCommand(const unsigned int id)
 				}
 			}
 
-			Track &background_sfx_psg3 = state.tracks[SPECIAL_SFX_PSG3];
+			Track &background_sfx_psg3 = state->tracks[SPECIAL_SFX_PSG3];
 
 			if (background_sfx_psg3.IsPlaying())
 			{
@@ -2110,7 +2090,7 @@ static void Sound_PlayCommand(const unsigned int id)
 				{
 					background_sfx_psg3.SendPSGNoteOff();
 
-					Track &music_psg3 = state.tracks[MUSIC_PSG3];
+					Track &music_psg3 = state->tracks[MUSIC_PSG3];
 					music_psg3.SetOverridden(false);
 					music_psg3.SetResting(true);
 
@@ -2138,35 +2118,35 @@ static void Sound_PlayCommand(const unsigned int id)
 			break;
 
 		case 5: // FadeOutMusic
-			state.variables.fadeout_delay = 3;
-			state.variables.fadeout_counter = 0x28;
-			state.variables.speedup = false;
+			state->variables.fadeout_delay = 3;
+			state->variables.fadeout_counter = 0x28;
+			state->variables.speedup = false;
 			break;
 
 		case 6: // SpeedUpMusic
-			if (state.variables.playing_1up)
+			if (state->variables.playing_1up)
 			{
-				state.variables_backup.main_tempo = state.variables_backup.speeduptempo;
-				state.variables_backup.speedup = true;
+				state->variables_backup.main_tempo = state->variables_backup.speeduptempo;
+				state->variables_backup.speedup = true;
 			}
 			else
 			{
-				state.variables.main_tempo = state.variables.speeduptempo;
-				state.variables.speedup = true;
+				state->variables.main_tempo = state->variables.speeduptempo;
+				state->variables.speedup = true;
 			}
 			
 			break;
 
 		case 7: // SlowDownMusic
-			if (state.variables.playing_1up)
+			if (state->variables.playing_1up)
 			{
-				state.variables_backup.main_tempo = state.variables_backup.tempo_mod;
-				state.variables_backup.speedup = false;
+				state->variables_backup.main_tempo = state->variables_backup.tempo_mod;
+				state->variables_backup.speedup = false;
 			}
 			else
 			{
-				state.variables.main_tempo = state.variables.tempo_mod;
-				state.variables.speedup = false;
+				state->variables.main_tempo = state->variables.tempo_mod;
+				state->variables.speedup = false;
 			}
 			
 			break;
@@ -2175,25 +2155,23 @@ static void Sound_PlayCommand(const unsigned int id)
 
 static void PlaySoundID(const unsigned int id)
 {
-	if (id >= data->music.begin && id < data->music.end)
-		Sound_PlayBGM(id - data->music.begin);
-	else if (id >= data->sfx.begin && id < data->sfx.end)
-		Sound_PlaySFX(id - data->sfx.begin);
+	if (id >= data.music.begin && id < data.music.end)
+		Sound_PlayBGM(id - data.music.begin);
+	else if (id >= data.sfx.begin && id < data.sfx.end)
+		Sound_PlaySFX(id - data.sfx.begin);
 #ifdef SMPS_EnableSpecSFX
-	else if (id >= data->background_sfx.begin && id < data->background_sfx.end)
-		Sound_PlaySpecial(id - data->background_sfx.begin);
+	else if (id >= data.background_sfx.begin && id < data.background_sfx.end)
+		Sound_PlaySpecial(id - data.background_sfx.begin);
 #endif
-	else if (id >= data->dac.begin && id < data->dac.end)
-		Sound_PlayDAC(id - data->dac.begin);
+	else if (id >= data.dac.begin && id < data.dac.end)
+		Sound_PlayDAC(id - data.dac.begin);
 	else
 		Sound_PlayCommand(id);
 }
 
 static void CycleSoundQueue()
 {
-	State &state = data->state;
-
-	for (auto &queue_slot : state.variables.queue)
+	for (auto &queue_slot : state->variables.queue)
 	{
 		const unsigned int id = queue_slot;
 		queue_slot = 0;
@@ -2203,11 +2181,11 @@ static void CycleSoundQueue()
 
 		const std::optional<Priority> priority = [&]() -> std::optional<Priority>
 		{
-			if (id >= data->sfx.begin && id < data->sfx.end)
-				return data->sfx.list[id - data->sfx.begin].priority;
+			if (id >= data.sfx.begin && id < data.sfx.end)
+				return data.sfx.list[id - data.sfx.begin].priority;
 		#ifdef SMPS_EnableSpecSFX
-			else if (id >= data->background_sfx.begin && id < data->background_sfx.end)
-				return data->background_sfx.list[id - data->background_sfx.begin].priority;
+			else if (id >= data.background_sfx.begin && id < data.background_sfx.end)
+				return data.background_sfx.list[id - data.background_sfx.begin].priority;
 		#endif
 			else
 				return std::nullopt;
@@ -2215,10 +2193,10 @@ static void CycleSoundQueue()
 
 		if (priority.has_value() && !priority->do_not_save)
 		{
-			if (priority->value < state.variables.sndprio)
+			if (priority->value < state->variables.sndprio)
 				continue;
 
-			state.variables.sndprio = priority->value;
+			state->variables.sndprio = priority->value;
 		}
 
 		PlaySoundID(id);
@@ -2227,12 +2205,11 @@ static void CycleSoundQueue()
 
 static void TempoWait()
 {
-	State &state = data->state;
-	const unsigned int tempo_sum = state.variables.main_tempo + state.variables.main_tempo_timeout;
-	state.variables.main_tempo_timeout = tempo_sum % 0x100;
+	const unsigned int tempo_sum = state->variables.main_tempo + state->variables.main_tempo_timeout;
+	state->variables.main_tempo_timeout = tempo_sum % 0x100;
 
 	if (tempo_sum >= 0x100)
-		for (Track *track = &state.tracks[MUSIC_BEGIN]; track != &state.tracks[MUSIC_END]; ++track)
+		for (Track *track = &state->tracks[MUSIC_BEGIN]; track != &state->tracks[MUSIC_END]; ++track)
 			++track->duration_timeout;
 }
 
@@ -2240,46 +2217,42 @@ static void UpdateMusic();
 
 static void DoMusicTempoSpeedup()
 {
-	State &state = data->state;
-
 	// Handle the tempo modifier, as used by Sonic 3 & Knuckles.
 	// TODO: Backing-up and other stuff from the S&K driver.
-	if (!state.variables.ignore_speedup && state.music_tempo_modifier_master != 0 && state.music_tempo_modifier-- == 0)
+	if (!state->variables.ignore_speedup && state->music_tempo_modifier_master != 0 && state->music_tempo_modifier-- == 0)
 	{
-		state.music_tempo_modifier = state.music_tempo_modifier_master;
+		state->music_tempo_modifier = state->music_tempo_modifier_master;
 		UpdateMusic();
 	}
 }
 
 static void UpdateMusic()
 {
-	State &state = data->state;
+	if (state->tracks[MUSIC_DAC].IsPlaying())
+		state->tracks[MUSIC_DAC].DACUpdateTrack();
 
-	if (state.tracks[MUSIC_DAC].IsPlaying())
-		state.tracks[MUSIC_DAC].DACUpdateTrack();
-
-	for (Track *track = &state.tracks[MUSIC_FM_BEGIN]; track != &state.tracks[MUSIC_FM_END]; ++track)
+	for (Track *track = &state->tracks[MUSIC_FM_BEGIN]; track != &state->tracks[MUSIC_FM_END]; ++track)
 		if (track->IsPlaying())
 			track->FMUpdateTrack();
 
-	for (Track *track = &state.tracks[MUSIC_PSG_BEGIN]; track != &state.tracks[MUSIC_PSG_END]; ++track)
+	for (Track *track = &state->tracks[MUSIC_PSG_BEGIN]; track != &state->tracks[MUSIC_PSG_END]; ++track)
 		if (track->IsPlaying())
 			track->PSGUpdateTrack();
 #ifdef SMPS_EnablePSGNoiseDrums
-	if (state.tracks[MUSIC_PSG_NOISE].IsPlaying())
-		state.tracks[MUSIC_PSG_NOISE].PSGNoiseUpdateTrack();
+	if (state->tracks[MUSIC_PSG_NOISE].IsPlaying())
+		state->tracks[MUSIC_PSG_NOISE].PSGNoiseUpdateTrack();
 #endif
 	TempoWait();
 
 	// Do the speed-up that S&K's driver does in its music update function.
 	DoMusicTempoSpeedup();
 
-	if (state.variables.fade_to_previous_pending)
+	if (state->variables.fade_to_previous_pending)
 	{
-		std::copy(&state.tracks[BACKUP_BEGIN], &state.tracks[BACKUP_END], &state.tracks[MUSIC_BEGIN]);
-		state.variables = state.variables_backup;
+		std::copy(&state->tracks[BACKUP_BEGIN], &state->tracks[BACKUP_END], &state->tracks[MUSIC_BEGIN]);
+		state->variables = state->variables_backup;
 
-		for (Track *track = &state.tracks[MUSIC_BEGIN]; track != &state.tracks[MUSIC_END]; ++track)
+		for (Track *track = &state->tracks[MUSIC_BEGIN]; track != &state->tracks[MUSIC_END]; ++track)
 		{
 			// Back-up the 'is playing' flag to the 'is overridden' flag.
 			track->SetPlaying(track->IsOverridden());
@@ -2288,9 +2261,9 @@ static void UpdateMusic()
 			track->SetOverridden(false);
 		}
 
-		state.variables.fadein_counter = 0x28;
+		state->variables.fadein_counter = 0x28;
 
-		Track* const dac_track = &state.tracks[MUSIC_DAC];
+		Track* const dac_track = &state->tracks[MUSIC_DAC];
 
 		LockZ80BusFMSafe(
 			[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -2298,7 +2271,7 @@ static void UpdateMusic()
 				if (dac_track->IsPlaying())
 					dac_track->SetDACVolume(z80_bus);
 
-				for (Track *fm_track = &state.tracks[MUSIC_FM_BEGIN]; fm_track != &state.tracks[MUSIC_FM_END]; ++fm_track)
+				for (Track *fm_track = &state->tracks[MUSIC_FM_BEGIN]; fm_track != &state->tracks[MUSIC_FM_END]; ++fm_track)
 				{
 					if (fm_track->IsPlaying())
 					{
@@ -2309,7 +2282,7 @@ static void UpdateMusic()
 			}
 		);
 
-		for (Track *psg_track = &state.tracks[MUSIC_PSG_BEGIN]; psg_track != &state.tracks[MUSIC_PSG_END]; ++psg_track)
+		for (Track *psg_track = &state->tracks[MUSIC_PSG_BEGIN]; psg_track != &state->tracks[MUSIC_PSG_END]; ++psg_track)
 		{
 			if (psg_track->IsPlaying())
 			{
@@ -2321,27 +2294,25 @@ static void UpdateMusic()
 			}
 		}
 
-		state.tracks[MUSIC_DAC].SetFM6Overridden(true);
-		state.tracks[MUSIC_FM6].SetFM6Overridden(true);
+		state->tracks[MUSIC_DAC].SetFM6Overridden(true);
+		state->tracks[MUSIC_FM6].SetFM6Overridden(true);
 
-		state.variables.playing_1up = false;
+		state->variables.playing_1up = false;
 	}
 }
 
 static void DoFadeIn()
 {
-	State &state = data->state;
-
-	if (state.variables.fadein_delay != 0)
+	if (state->variables.fadein_delay != 0)
 	{
-		--state.variables.fadein_delay;
+		--state->variables.fadein_delay;
 		return;
 	}
 
-	--state.variables.fadein_counter;
-	state.variables.fadein_delay = 2;
+	--state->variables.fadein_counter;
+	state->variables.fadein_delay = 2;
 
-	Track* const dac_track = &state.tracks[MUSIC_DAC];
+	Track* const dac_track = &state->tracks[MUSIC_DAC];
 
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -2351,7 +2322,7 @@ static void DoFadeIn()
 
 			const auto FMLoop = [&](const unsigned int first_track_index, const unsigned int last_track_index)
 			{
-				for (Track *track = &state.tracks[first_track_index]; track != &state.tracks[last_track_index]; ++track)
+				for (Track *track = &state->tracks[first_track_index]; track != &state->tracks[last_track_index]; ++track)
 					if (track->IsPlaying())
 						track->SendVoiceTL(z80_bus);
 			};
@@ -2366,7 +2337,7 @@ static void DoFadeIn()
 
 	const auto PSGLoop = [&](const unsigned int first_track_index, const unsigned int last_track_index)
 	{
-		for (Track *track = &state.tracks[first_track_index]; track != &state.tracks[last_track_index]; ++track)
+		for (Track *track = &state->tracks[first_track_index]; track != &state->tracks[last_track_index]; ++track)
 		{
 			if (track->IsPlaying())
 			{
@@ -2390,23 +2361,21 @@ static void DoFadeIn()
 
 static void DoFadeOut()
 {
-	State &state = data->state;
-
-	if (state.variables.fadeout_delay != 0)
+	if (state->variables.fadeout_delay != 0)
 	{
-		--state.variables.fadeout_delay;
+		--state->variables.fadeout_delay;
 		return;
 	}
 
-	if (--state.variables.fadeout_counter == 0)
+	if (--state->variables.fadeout_counter == 0)
 	{
 		StopAllSound();
 		return;
 	}
 
-	state.variables.fadeout_delay = 3;
+	state->variables.fadeout_delay = 3;
 
-	Track* const dac_track = &state.tracks[MUSIC_DAC];
+	Track* const dac_track = &state->tracks[MUSIC_DAC];
 
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -2421,7 +2390,7 @@ static void DoFadeOut()
 					dac_track->SetDACVolume(z80_bus);
 			}
 
-			for (Track *fm_track = &state.tracks[MUSIC_FM_BEGIN]; fm_track != &state.tracks[MUSIC_FM_END]; ++fm_track)
+			for (Track *fm_track = &state->tracks[MUSIC_FM_BEGIN]; fm_track != &state->tracks[MUSIC_FM_END]; ++fm_track)
 			{
 				if (fm_track->IsPlaying())
 				{
@@ -2436,7 +2405,7 @@ static void DoFadeOut()
 		}
 	);
 
-	for (Track *psg_track = &state.tracks[MUSIC_PSG_BEGIN]; psg_track != &state.tracks[MUSIC_PSG_END]; ++psg_track)
+	for (Track *psg_track = &state->tracks[MUSIC_PSG_BEGIN]; psg_track != &state->tracks[MUSIC_PSG_END]; ++psg_track)
 	{
 		if (psg_track->IsPlaying())
 		{
@@ -2457,13 +2426,13 @@ static void DoFadeOut()
 	}
 
 #ifdef SMPS_EnablePSGNoiseDrums
-	auto* const psg_track = &state.tracks[MUSIC_PSG_NOISE];
+	auto* const psg_track = &state->tracks[MUSIC_PSG_NOISE];
 
 	if (psg_track->IsPlaying())
 	{
-		state.variables.psg_drum_volume += 4;
+		state->variables.psg_drum_volume += 4;
 
-		if (state.variables.psg_drum_volume >= 0x80)
+		if (state->variables.psg_drum_volume >= 0x80)
 			psg_track->SetPlaying(false);
 	}
 #endif
@@ -2471,14 +2440,12 @@ static void DoFadeOut()
 
 static void HandlePause()
 {
-	State &state = data->state;
-
-	if (state.pause < 0x80)
+	if (state->pause < 0x80)
 	{
-		if (state.pause == 2)
+		if (state->pause == 2)
 			return;
 
-		state.pause = 2;
+		state->pause = 2;
 
 		LockZ80BusFMSafe(
 			[](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -2491,12 +2458,12 @@ static void HandlePause()
 	{
 		const auto RestoreFMTrackVoices = [&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigned int begin, const unsigned int end)
 		{
-			for (Track *track = &state.tracks[begin]; track != &state.tracks[end]; ++track)
+			for (Track *track = &state->tracks[begin]; track != &state->tracks[end]; ++track)
 				if (track->IsPlaying() && !track->IsOverridden())
 					track->SetVoice(z80_bus);
 		};
 
-		state.pause = 0;
+		state->pause = 0;
 
 		LockZ80BusFMSafe(
 			[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -2508,7 +2475,7 @@ static void HandlePause()
 #endif
 
 				// Apply DAC panning if necessary (RestoreFMTrackVoices already reapplied FM6's panning).
-				auto &dac_track = state.tracks[MUSIC_DAC];
+				auto &dac_track = state->tracks[MUSIC_DAC];
 				if (dac_track.IsPlaying() && !dac_track.IsOverridden() && !dac_track.IsFM6Overridden())
 					z80_bus.WriteFMII(0xB6, dac_track.ams_fms_pan);
 
@@ -2525,54 +2492,52 @@ static void HandlePause()
 
 STARTING_FUNCTION void SMPS::UpdateDriver()
 {
-	State &state = data->state;
-
-	if (state.pause != 0)
+	if (state->pause != 0)
 	{
 		HandlePause();
 		return;
 	}
 
-	if (state.variables.fadeout_counter != 0)
+	if (state->variables.fadeout_counter != 0)
 		DoFadeOut();
 
-	if (state.variables.fadein_counter != 0)
+	if (state->variables.fadein_counter != 0)
 		DoFadeIn();
 
-	if (state.variables.queue.IsAnythingQueued())
+	if (state->variables.queue.IsAnythingQueued())
 		CycleSoundQueue();
 
 #ifdef SMPS_EnableSpinDashSFX
-	if (state.spindash_timer != 0)
-		--state.spindash_timer;
+	if (state->spindash_timer != 0)
+		--state->spindash_timer;
 #endif
 
 	// Do the speed-up that S&K's driver does in its SFX update function.
 	DoMusicTempoSpeedup();
 
 	// Update the music twice on some frames so that music is the same speed on NTSC and PAL consoles.
-	if (state.pal && !state.variables.force_pal_tempo && --state.variables.pal_audio_countdown == 0)
+	if (state->pal && !state->variables.force_pal_tempo && --state->variables.pal_audio_countdown == 0)
 	{
-		state.variables.pal_audio_countdown = 5;
+		state->variables.pal_audio_countdown = 5;
 		UpdateMusic();
 	}
 
 	UpdateMusic();
 
-	for (Track *track = &state.tracks[SFX_FM_BEGIN]; track != &state.tracks[SFX_FM_END]; ++track)
+	for (Track *track = &state->tracks[SFX_FM_BEGIN]; track != &state->tracks[SFX_FM_END]; ++track)
 		if (track->IsPlaying())
 			track->FMUpdateTrack();
 
-	for (Track *track = &state.tracks[SFX_PSG_BEGIN]; track != &state.tracks[SFX_PSG_END]; ++track)
+	for (Track *track = &state->tracks[SFX_PSG_BEGIN]; track != &state->tracks[SFX_PSG_END]; ++track)
 		if (track->IsPlaying())
 			track->PSGUpdateTrack();
 
 #ifdef SMPS_EnableSpecSFX
-	if (state.tracks[SPECIAL_SFX_FM4].IsPlaying())
-		state.tracks[SPECIAL_SFX_FM4].FMUpdateTrack();
+	if (state->tracks[SPECIAL_SFX_FM4].IsPlaying())
+		state->tracks[SPECIAL_SFX_FM4].FMUpdateTrack();
 
-	if (state.tracks[SPECIAL_SFX_PSG3].IsPlaying())
-		state.tracks[SPECIAL_SFX_PSG3].PSGUpdateTrack();
+	if (state->tracks[SPECIAL_SFX_PSG3].IsPlaying())
+		state->tracks[SPECIAL_SFX_PSG3].PSGUpdateTrack();
 #endif
 }
 
