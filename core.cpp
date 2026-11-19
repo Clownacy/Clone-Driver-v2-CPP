@@ -1699,7 +1699,6 @@ static void InitMusicPlayback()
 {
 	// Save several values.
 	const auto sndprio = state->variables.sndprio;
-	const auto playing_1up = state->variables.playing_1up;
 	const auto speedup = state->variables.speedup;
 	const auto fadein_counter = state->variables.fadein_counter;
 	const auto queue = state->variables.queue;
@@ -1709,7 +1708,6 @@ static void InitMusicPlayback()
 
 	// Restore the values saved above.
 	state->variables.sndprio = sndprio;
-	state->variables.playing_1up = playing_1up;
 	state->variables.speedup = speedup;
 	state->variables.fadein_counter = fadein_counter;
 	state->variables.queue = queue;
@@ -1759,22 +1757,19 @@ static void Sound_PlayBGM(const unsigned int id)
 
 	if (music.extra_life_jingle)
 	{
-		if (!state->variables.playing_1up)
+		if (!state->shared.IsMusicBackupActive())
 		{
-			state->variables.playing_1up = true;
-
+			state->shared.CreateMusicBackup(state->music_tracks, state->variables);
 			state->variables.sndprio = 0;
-
-			auto &music_backup = state->GetMusicBackup();
-			music_backup.tracks = state->music_tracks;
-			music_backup.variables = state->variables;
 		}
 	}
 	else
 	{
 		state->variables.fadein_counter = 0;
 		state->variables.fadeout_counter = 0;
-		state->variables.playing_1up = false;
+
+		if (state->shared.IsMusicBackupActive())
+			state->shared.DestroyMusicBackup();
 	}
 
 	InitMusicPlayback();
@@ -1918,7 +1913,7 @@ static void Sound_PlayBGM(const unsigned int id)
 
 static void Sound_PlaySFX(const unsigned int id)
 {
-	if (state->variables.playing_1up)
+	if (state->shared.IsMusicBackupActive())
 	{
 		state->variables.sndprio = 0;
 		return;
@@ -2067,7 +2062,7 @@ static void Sound_PlaySFX(const unsigned int id)
 #ifdef SMPS_EnableSpecSFX
 static void Sound_PlaySpecial(const unsigned int id)
 {
-	if (state->variables.playing_1up)
+	if (state->shared.IsMusicBackupActive())
 		return;
 
 	State::Shared::NonMusicTracks &non_music_tracks = state->GetNonMusicTracks();
@@ -2301,7 +2296,7 @@ static void Sound_PlayCommand(const unsigned int id)
 			break;
 
 		case 6: // SpeedUpMusic
-			state->VisitShared(
+			state->shared.Visit(
 				[](State::Shared::MusicBackup &music_backup)
 				{
 					music_backup.variables.main_tempo = music_backup.variables.speeduptempo;
@@ -2317,7 +2312,7 @@ static void Sound_PlayCommand(const unsigned int id)
 			break;
 
 		case 7: // SlowDownMusic
-			state->VisitShared(
+			state->shared.Visit(
 				[](State::Shared::MusicBackup &music_backup)
 				{
 					music_backup.variables.main_tempo = music_backup.variables.tempo_mod;
@@ -2440,7 +2435,7 @@ static void UpdateMusic()
 		const auto &music_backup = state->GetMusicBackup();
 		state->music_tracks = music_backup.tracks;
 		state->variables = music_backup.variables;
-		state->variables.playing_1up = false;
+		state->shared.DestroyMusicBackup();
 
 		// Begin fade-in.
 		state->variables.fadein_counter = 0x28;
@@ -2479,14 +2474,6 @@ static void UpdateMusic()
 
 		state->music_tracks.dac.SetFM6Overridden(true);
 		state->music_tracks.FM6().SetFM6Overridden(true);
-
-		// Mark the SFX as no longer playing, since their RAM has been trashed by the music backup.
-		state->GetNonMusicTracks().Iterate(
-			[](Track &track)
-			{
-				track.SetPlaying(false);
-			}
-		);
 	}
 }
 

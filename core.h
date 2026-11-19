@@ -262,7 +262,6 @@ namespace SMPS
 		unsigned char sndprio;
 		unsigned char main_tempo_timeout;
 		unsigned char main_tempo;
-		bool playing_1up : 1;
 		bool fade_to_previous_pending : 1;
 		bool speedup : 1;
 		bool force_pal_tempo : 1;
@@ -323,13 +322,15 @@ namespace SMPS
 			// TODO: Add a 'clear' method?
 		} music_tracks;
 
-		union Shared
+		class Shared
 		{
+		public:
 			struct MusicBackup
 			{
-				Variables variables;
 				MusicTracks tracks;
-			} music_backup;
+				Variables variables;
+			};
+
 			struct NonMusicTracks
 			{
 				struct
@@ -374,23 +375,58 @@ namespace SMPS
 					special_sfx.Iterate(callback);
 				#endif
 				}
-			} non_music_tracks;
+			};
+
+		private:
+			union
+			{
+				MusicBackup music_backup;
+				NonMusicTracks non_music_tracks;
+			};
+			bool music_backup_active : 1;
+
+		public:
+			template<typename... Ts>
+			decltype(auto) Visit(Ts &&...visitors)
+			{
+				auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
+
+				if (music_backup_active)
+					return visitor(music_backup);
+				else
+					return visitor(non_music_tracks);
+			}
+
+			bool IsMusicBackupActive() const
+			{
+				return music_backup_active;
+			}
+
+			void CreateMusicBackup(const MusicTracks &tracks, const Variables &variables)
+			{
+				music_backup_active = true;
+
+				music_backup.tracks = tracks;
+				music_backup.variables = variables;
+			}
+
+			void DestroyMusicBackup()
+			{
+				// Mark the SFX as no longer playing, since their RAM has been trashed by the music backup.
+				non_music_tracks.Iterate(
+					[](Track &track)
+					{
+						track.SetPlaying(false);
+					}
+				);
+
+				music_backup_active = false;
+			}
 		} shared;
-
-		template<typename... Ts>
-		decltype(auto) VisitShared(Ts &&...visitors)
-		{
-			auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
-
-			if (variables.playing_1up)
-				return visitor(shared.music_backup);
-			else
-				return visitor(shared.non_music_tracks);
-		}
 
 		void VisitNonMusicTracks(const auto &callback)
 		{
-			return VisitShared(
+			return shared.Visit(
 				[&callback](Shared::NonMusicTracks &non_music_tracks)
 				{
 					callback(non_music_tracks);
@@ -401,7 +437,7 @@ namespace SMPS
 
 		Shared::NonMusicTracks& GetNonMusicTracks()
 		{
-			return VisitShared(
+			return shared.Visit(
 				[](Shared::NonMusicTracks &non_music_tracks) -> Shared::NonMusicTracks&
 				{
 					return non_music_tracks;
@@ -415,7 +451,7 @@ namespace SMPS
 
 		Shared::MusicBackup& GetMusicBackup()
 		{
-			return VisitShared(
+			return shared.Visit(
 				[](Shared::MusicBackup &music_backup) -> Shared::MusicBackup&
 				{
 					return music_backup;
@@ -442,9 +478,6 @@ namespace SMPS
 			);
 		}
 
-		Variables variables;
-
-		unsigned char pause;
 	#ifdef SMPS_GloopSFXBehaviour
 		bool gloop_toggle : 1;
 	#endif
@@ -459,12 +492,16 @@ namespace SMPS
 	#endif
 		bool pal : 1;
 
+		unsigned char pause;
+
 	#ifdef SMPS_EnableSpinDashSFX
 		unsigned char spindash_timer;
 		unsigned char spindash_pitch;
 	#endif
 
 		unsigned char music_tempo_modifier, music_tempo_modifier_master;
+
+		Variables variables;
 	};
 
 	struct Priority
