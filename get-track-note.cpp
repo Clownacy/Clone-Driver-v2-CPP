@@ -144,7 +144,7 @@ STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, c
 			if (z80_sample_address == zMuteSample)
 				return 0;
 
-			return track.saved_dac;
+			return track.freq;
 		}
 		else
 		{

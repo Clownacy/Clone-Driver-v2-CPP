@@ -68,21 +68,12 @@ namespace SMPS
 	{
 		unsigned char playback_control;
 		unsigned char voice_control;
-		union
-		{
-			unsigned char vol_env_index;
-			unsigned char ams_fms_pan;
-		};
 		unsigned char tempo_divider; // TODO: Move this to global variables for music tracks.
 		signed char transpose;
 		unsigned char volume;
 		unsigned char voice_index;
 		const unsigned char *data_pointer;
-		union
-		{
-			unsigned char saved_dac;
-			unsigned short freq;
-		};
+		unsigned short freq;
 		unsigned char stack_pointer;
 		unsigned char duration_timeout;
 		unsigned char saved_duration;
@@ -106,6 +97,9 @@ namespace SMPS
 			std::array<const unsigned char*, 3> go_sub_stack;
 		};
 
+		// Generic (TODO: Combine this with the following).
+		void DoModulation();
+
 		// Generic
 		void WriteFMIorII(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, unsigned char port, unsigned char value);
 		void cfJumpTo();
@@ -117,45 +111,6 @@ namespace SMPS
 		[[nodiscard]] bool IsMusic() const;
 		void ReloadModulationData();
 		[[nodiscard]] std::optional<unsigned char> GetNoteOrDuration();
-
-		// DAC
-		void DACUpdateSample();
-		[[nodiscard]] bool DACDoNext();
-		void DACUpdateTrack();
-		void SetDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-
-		// FM
-		void SendVoiceTLCommon(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const Voice &voice, bool force_upload);
-		void SendVoiceTL(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void SetVoice(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void FMSilenceChannel(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void SendFMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void FMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void FMNoteOff();
-		void FMUpdateTrack();
-		void DoModulation();
-		[[nodiscard]] bool FMUpdateFreq();
-		[[nodiscard]] bool FMPrepareNote();
-		[[nodiscard]] bool FMDoNext();
-		void FMNoteOn();
-		void FMSetFreq(unsigned char note);
-
-		// PSG
-		void PSGUpdateTrack();
-		[[nodiscard]] bool PSGUpdateFreq();
-		[[nodiscard]] bool PSGDoNoteOn();
-		[[nodiscard]] bool PSGDoNext();
-		void PSGSetFreq(unsigned char note);
-		[[nodiscard]] bool PSGUpdateVolFX();
-		[[nodiscard]] bool PSGDoVolFX();
-		void SetPSGVolume(unsigned int psg_volume);
-		void SendPSGNoteOff();
-		void PSGNoteOff();
-
-		// PSG Noise
-		void PSGNoiseUpdateTrack();
-		[[nodiscard]] bool PSGNoiseDoNext();
-		void PSGNoiseSetDrumNote(unsigned char note);
 
 	#define BIT_METHOD_IS(VARIABLE, BIT, NAME) [[nodiscard]] bool Is##NAME() const {return ((VARIABLE) & 1 << (BIT)) != 0;}
 	#define BIT_METHODS(VARIABLE, BIT, NAME) \
@@ -191,7 +146,93 @@ namespace SMPS
 		BIT_METHODS(playback_control, 3, ModulationEnabled)
 		BIT_METHODS(playback_control, 5, ModulationInZ80Mode)
 	#endif
+
+		template<typename... Ts>
+		struct VisitHelper : Ts... { using Ts::operator()...; };
+
+		/* Deduction guide. */
+		template<typename... Ts>
+		VisitHelper(Ts...) -> VisitHelper<Ts...>;
+
+		auto VisitInternal(const auto &visitor);
+
+		template<typename... Ts>
+		auto Visit(Ts &&...visitors)
+		{
+			return VisitInternal(VisitHelper{std::forward<Ts>(visitors)...});
+		}
 	};
+
+	struct YM2612Track : Track
+	{
+		unsigned char ams_fms_pan;
+	};
+
+	struct DACTrack : YM2612Track
+	{
+		void DACUpdateSample();
+		[[nodiscard]] bool DACDoNext();
+		void DACUpdateTrack();
+		void SetDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+	};
+
+	struct FMTrack : YM2612Track
+	{
+		void SendVoiceTLCommon(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const Voice &voice, bool force_upload);
+		void SendVoiceTL(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void SetVoice(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void FMSilenceChannel(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void SendFMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void FMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void FMNoteOff();
+		void FMUpdateTrack();
+		[[nodiscard]] bool FMUpdateFreq();
+		[[nodiscard]] bool FMPrepareNote();
+		[[nodiscard]] bool FMDoNext();
+		void FMNoteOn();
+		void FMSetFreq(unsigned char note);
+	};
+
+	struct PSGTrack : Track
+	{
+		unsigned char vol_env_index;
+
+		// PSG
+		void PSGUpdateTrack();
+		[[nodiscard]] bool PSGUpdateFreq();
+		[[nodiscard]] bool PSGDoNoteOn();
+		[[nodiscard]] bool PSGDoNext();
+		void PSGSetFreq(unsigned char note);
+		[[nodiscard]] bool PSGUpdateVolFX();
+		[[nodiscard]] bool PSGDoVolFX();
+		void SetPSGVolume(unsigned int psg_volume);
+		void SendPSGNoteOff();
+		void PSGNoteOff();
+
+		// PSG Noise
+		void PSGNoiseUpdateTrack();
+		[[nodiscard]] bool PSGNoiseDoNext();
+		void PSGNoiseSetDrumNote(unsigned char note);
+	};
+
+#ifdef SMPS_EnablePWM
+	struct PWMTrack : Track
+	{};
+#endif
+
+	inline auto Track::VisitInternal(const auto &visitor)
+	{
+		if (IsDAC())
+			return visitor(static_cast<DACTrack&>(*this));
+		else if (IsPSG())
+			return visitor(static_cast<PSGTrack&>(*this));
+#ifdef SMPS_EnablePWM
+		else if (IsPWM())
+			return visitor(static_cast<PWMTrack&>(*this));
+#endif
+		else
+			return visitor(static_cast<FMTrack&>(*this));
+	}
 
 	//};
 
@@ -244,22 +285,22 @@ namespace SMPS
 		{
 			struct
 			{
-				Track dac;
-				std::array<Track, 6> fm;
-				std::array<Track, 3> psg;
+				DACTrack dac;
+				std::array<FMTrack, 6> fm;
+				std::array<PSGTrack, 3> psg;
 			#ifdef SMPS_EnablePSGNoiseDrums
-				Track psg_noise;
+				PSGTrack psg_noise;
 			#endif
 
-				Track& FM1()  { return fm[0]; }
-				Track& FM2()  { return fm[1]; }
-				Track& FM3()  { return fm[2]; }
-				Track& FM4()  { return fm[3]; }
-				Track& FM5()  { return fm[4]; }
-				Track& FM6()  { return fm[5]; }
-				Track& PSG1() { return psg[0]; }
-				Track& PSG2() { return psg[1]; }
-				Track& PSG3() { return psg[2]; }
+				FMTrack& FM1()  { return fm[0]; }
+				FMTrack& FM2()  { return fm[1]; }
+				FMTrack& FM3()  { return fm[2]; }
+				FMTrack& FM4()  { return fm[3]; }
+				FMTrack& FM5()  { return fm[4]; }
+				FMTrack& FM6()  { return fm[5]; }
+				PSGTrack& PSG1() { return psg[0]; }
+				PSGTrack& PSG2() { return psg[1]; }
+				PSGTrack& PSG3() { return psg[2]; }
 
 				void Iterate(const auto &callback)
 				{
@@ -278,15 +319,15 @@ namespace SMPS
 
 			struct
 			{
-				std::array<Track, 3> fm;
-				std::array<Track, 3> psg;
+				std::array<FMTrack, 3> fm;
+				std::array<PSGTrack, 3> psg;
 
-				Track& FM3()  { return fm[0]; }
-				Track& FM4()  { return fm[1]; }
-				Track& FM5()  { return fm[2]; }
-				Track& PSG1() { return psg[0]; }
-				Track& PSG2() { return psg[1]; }
-				Track& PSG3() { return psg[2]; }
+				FMTrack& FM3()  { return fm[0]; }
+				FMTrack& FM4()  { return fm[1]; }
+				FMTrack& FM5()  { return fm[2]; }
+				PSGTrack& PSG1() { return psg[0]; }
+				PSGTrack& PSG2() { return psg[1]; }
+				PSGTrack& PSG3() { return psg[2]; }
 
 				void Iterate(const auto &callback)
 				{
@@ -300,8 +341,8 @@ namespace SMPS
 		#ifdef SMPS_EnableSpecSFX
 			struct
 			{
-				Track fm4;
-				Track psg3;
+				FMTrack fm4;
+				PSGTrack psg3;
 
 				void Iterate(const auto &callback)
 				{
