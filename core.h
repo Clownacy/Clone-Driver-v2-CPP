@@ -386,17 +386,6 @@ namespace SMPS
 			bool music_backup_active : 1;
 
 		public:
-			template<typename... Ts>
-			decltype(auto) Visit(Ts &&...visitors)
-			{
-				auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
-
-				if (music_backup_active)
-					return visitor(music_backup);
-				else
-					return visitor(non_music_tracks);
-			}
-
 			bool IsMusicBackupActive() const
 			{
 				return music_backup_active;
@@ -422,52 +411,63 @@ namespace SMPS
 
 				music_backup_active = false;
 			}
+
+			template<typename... Ts>
+			decltype(auto) Visit(Ts &&...visitors)
+			{
+				auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
+
+				if (music_backup_active)
+					return visitor(music_backup);
+				else
+					return visitor(non_music_tracks);
+			}
+
+			void VisitNonMusicTracks(const auto &callback)
+			{
+				return Visit(
+					[&callback](NonMusicTracks &non_music_tracks)
+					{
+						callback(non_music_tracks);
+					},
+					[](auto&) {}
+				);
+			}
+
+			NonMusicTracks& GetNonMusicTracks()
+			{
+				return Visit(
+					[](NonMusicTracks &non_music_tracks) -> NonMusicTracks&
+					{
+						return non_music_tracks;
+					},
+					[](auto&) -> NonMusicTracks&
+					{
+						std::unreachable();
+					}
+				);
+			}
+
+			MusicBackup& GetMusicBackup()
+			{
+				return Visit(
+					[](MusicBackup &music_backup) -> MusicBackup&
+					{
+						return music_backup;
+					},
+					[](auto&) -> MusicBackup&
+					{
+						std::unreachable();
+					}
+				);
+			}
 		} shared;
-
-		void VisitNonMusicTracks(const auto &callback)
-		{
-			return shared.Visit(
-				[&callback](Shared::NonMusicTracks &non_music_tracks)
-				{
-					callback(non_music_tracks);
-				},
-				[](auto&) {}
-			);
-		}
-
-		Shared::NonMusicTracks& GetNonMusicTracks()
-		{
-			return shared.Visit(
-				[](Shared::NonMusicTracks &non_music_tracks) -> Shared::NonMusicTracks&
-				{
-					return non_music_tracks;
-				},
-				[](auto&) -> Shared::NonMusicTracks&
-				{
-					std::unreachable();
-				}
-			);
-		}
-
-		Shared::MusicBackup& GetMusicBackup()
-		{
-			return shared.Visit(
-				[](Shared::MusicBackup &music_backup) -> Shared::MusicBackup&
-				{
-					return music_backup;
-				},
-				[](auto&) -> Shared::MusicBackup&
-				{
-					std::unreachable();
-				}
-			);
-		}
 
 		void IterateTracks(const auto &callback)
 		{
 			music_tracks.Iterate(callback);
 
-			VisitNonMusicTracks(
+			shared.VisitNonMusicTracks(
 				[&callback](auto &non_music_tracks)
 				{
 					non_music_tracks.sfx.Iterate(callback);

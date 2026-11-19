@@ -98,7 +98,7 @@ static Track& SFX_BGMChannelRAM(const unsigned int index)
 
 static Track& SFX_SFXChannelRAM(const unsigned int index)
 {
-	State::Shared::NonMusicTracks &non_music_tracks = state->GetNonMusicTracks();
+	State::Shared::NonMusicTracks &non_music_tracks = state->shared.GetNonMusicTracks();
 
 	switch (index)
 	{
@@ -444,7 +444,7 @@ bool Track::CoordFlag(const unsigned int flag)
 						{
 							track.FMNoteOff(z80_bus);
 
-							if (state->GetNonMusicTracks().sfx.FM4().IsPlaying())
+							if (state->shared.GetNonMusicTracks().sfx.FM4().IsPlaying())
 								return;
 
 							FMTrack &music_fm4 = state->music_tracks.FM4();
@@ -559,7 +559,7 @@ bool Track::CoordFlag(const unsigned int flag)
 			if (IsMusic())
 				return false;
 
-			State::Shared::NonMusicTracks &non_music_tracks = state->GetNonMusicTracks();
+			State::Shared::NonMusicTracks &non_music_tracks = state->shared.GetNonMusicTracks();
 
 			state->variables.sndprio = 0;
 
@@ -1873,7 +1873,7 @@ static void Sound_PlayBGM(const unsigned int id)
 	}
 #endif
 
-	state->VisitNonMusicTracks(
+	state->shared.VisitNonMusicTracks(
 		[](auto &non_music_tracks)
 		{
 			non_music_tracks.sfx.Iterate(
@@ -2049,7 +2049,7 @@ static void Sound_PlaySFX(const unsigned int id)
 	}
 
 #ifdef SMPS_EnableSpecSFX
-	State::Shared::NonMusicTracks &non_music_tracks = state->GetNonMusicTracks();
+	State::Shared::NonMusicTracks &non_music_tracks = state->shared.GetNonMusicTracks();
 
 	if (non_music_tracks.sfx.FM4().IsPlaying())
 		non_music_tracks.special_sfx.fm4.SetOverridden(true);
@@ -2065,7 +2065,7 @@ static void Sound_PlaySpecial(const unsigned int id)
 	if (state->shared.IsMusicBackupActive())
 		return;
 
-	State::Shared::NonMusicTracks &non_music_tracks = state->GetNonMusicTracks();
+	State::Shared::NonMusicTracks &non_music_tracks = state->shared.GetNonMusicTracks();
 
 	const unsigned char* const header = data.background_sfx.list[id].data;
 
@@ -2152,7 +2152,7 @@ static void Sound_PlayCommand(const unsigned int id)
 		case 2: // StopSFX
 			state->variables.sndprio = false;
 
-			state->VisitNonMusicTracks(
+			state->shared.VisitNonMusicTracks(
 				[](auto &non_music_tracks)
 				{
 					LockZ80BusFMSafe(
@@ -2224,7 +2224,7 @@ static void Sound_PlayCommand(const unsigned int id)
 
 	#ifdef SMPS_EnableSpecSFX
 		case 3: // SpecStopSFX
-			state->VisitNonMusicTracks(
+			state->shared.VisitNonMusicTracks(
 				[](auto &non_music_tracks)
 				{
 					FMTrack &background_sfx_fm4 = non_music_tracks.special_sfx.fm4;
@@ -2432,7 +2432,7 @@ static void UpdateMusic()
 	if (state->variables.fade_to_previous_pending)
 	{
 		// Restore music backup.
-		const auto &music_backup = state->GetMusicBackup();
+		const auto &music_backup = state->shared.GetMusicBackup();
 		state->music_tracks = music_backup.tracks;
 		state->variables = music_backup.variables;
 		state->shared.DestroyMusicBackup();
@@ -2505,7 +2505,7 @@ static void DoFadeIn()
 			for (FMTrack &track : state->music_tracks.fm)
 				DoFM(track);
 
-			state->VisitNonMusicTracks(
+			state->shared.VisitNonMusicTracks(
 				[&DoFM](auto &non_music_tracks)
 				{
 					for (FMTrack &track : non_music_tracks.sfx.fm)
@@ -2535,7 +2535,7 @@ static void DoFadeIn()
 	DoPSG(state->music_tracks.psg_noise);
 #endif
 
-	state->VisitNonMusicTracks(
+	state->shared.VisitNonMusicTracks(
 		[&DoPSG](auto &non_music_tracks)
 		{
 			for (PSGTrack &track : non_music_tracks.sfx.psg)
@@ -2658,7 +2658,7 @@ static void HandlePause()
 				for (FMTrack &track : state->music_tracks.fm)
 					RestoreFMTrackVoice(z80_bus, track);
 
-				state->VisitNonMusicTracks(
+				state->shared.VisitNonMusicTracks(
 					[&RestoreFMTrackVoice, &z80_bus](auto &non_music_tracks)
 					{
 						for (FMTrack &track : non_music_tracks.sfx.fm)
@@ -2720,7 +2720,7 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 
 	UpdateMusic();
 
-	state->VisitNonMusicTracks(
+	state->shared.VisitNonMusicTracks(
 		[](auto &non_music_tracks)
 		{
 			for (FMTrack &track : non_music_tracks.sfx.fm)
