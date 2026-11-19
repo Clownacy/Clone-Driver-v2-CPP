@@ -63,27 +63,71 @@ static constexpr auto our_lround(const double frequency)
 	return static_cast<long>(frequency + 0.5);
 };
 
-static const auto SFX_BGMChannelRAM = std::to_array<unsigned char>({
-	MUSIC_FM3,
-	0, // Padding
-	MUSIC_FM4,
-	MUSIC_FM5,
-	MUSIC_PSG1,
-	MUSIC_PSG2,
-	MUSIC_PSG3, // Plain PSG3
-	MUSIC_PSG3, // Noise
-});
+static Track& SFX_BGMChannelRAM(const unsigned int index)
+{
+	switch (index)
+	{
+		default:
+			std::unreachable();
 
-static const auto SFX_SFXChannelRAM = std::to_array<unsigned char>({
-	SFX_FM3,
-	0, // Padding
-	SFX_FM4,
-	SFX_FM5,
-	SFX_PSG1,
-	SFX_PSG2,
-	SFX_PSG3, // Plain PSG3
-	SFX_PSG3, // Noise
-});
+		case 0:
+			return state->tracks.music.FM3();
+
+		case 1:
+			std::unreachable(); // Padding.
+
+		case 2:
+			return state->tracks.music.FM4();
+
+		case 3:
+			return state->tracks.music.FM5();
+
+		case 4:
+			return state->tracks.music.PSG1();
+
+		case 5:
+			return state->tracks.music.PSG2();
+
+		case 6:
+			return state->tracks.music.PSG3(); // Plain PSG3
+
+		case 7:
+			return state->tracks.music.PSG3(); // Noise
+	}
+}
+
+static Track& SFX_SFXChannelRAM(const unsigned int index)
+{
+	switch (index)
+	{
+		default:
+			std::unreachable();
+
+		case 0:
+			return state->tracks.sfx.FM3();
+
+		case 1:
+			std::unreachable(); // Padding.
+
+		case 2:
+			return state->tracks.sfx.FM4();
+
+		case 3:
+			return state->tracks.sfx.FM5();
+
+		case 4:
+			return state->tracks.sfx.PSG1();
+
+		case 5:
+			return state->tracks.sfx.PSG2();
+
+		case 6:
+			return state->tracks.sfx.PSG3(); // Plain PSG3
+
+		case 7:
+			return state->tracks.sfx.PSG3(); // Noise
+	}
+}
 
 ///////////////
 // Non-Track //
@@ -145,8 +189,12 @@ static void SilenceAll(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 static void StopAllSound()
 {
 	state->variables = {};
-	for (Track *track = &state->tracks[NON_BACKUP_TRACKS_BEGIN]; track != &state->tracks[NON_BACKUP_TRACKS_END]; ++track)
-		*track = {};
+	state->tracks.Iterate(
+		[](Track &track)
+		{
+			track = {};
+		}
+	);
 
 	// Disable music speed-up.
 	state->music_tempo_modifier_master = 0;
@@ -186,8 +234,8 @@ static void SendDACSampleRequest(ClownMDSDK::MainCPU::Z80::Bus &bus, const unsig
 
 static void PlayDACSFX(const unsigned int dac_channel, const unsigned int dac_index)
 {
-	state->tracks[MUSIC_DAC].SetFM6Overridden(true);
-	state->tracks[MUSIC_FM6].SetFM6Overridden(true);
+	state->tracks.music.dac.SetFM6Overridden(true);
+	state->tracks.music.FM6().SetFM6Overridden(true);
 
 	const auto &sample = GetDACSampleMetadata(dac_index);
 
@@ -379,10 +427,10 @@ bool Track::CoordFlag(const unsigned int flag)
 				{
 					FMNoteOff(z80_bus);
 
-					if (state->tracks[SFX_FM4].IsPlaying())
+					if (state->tracks.sfx.FM4().IsPlaying())
 						return false;
 
-					Track &music_fm4 = state->tracks[MUSIC_FM4];
+					Track &music_fm4 = state->tracks.music.FM4();
 					music_fm4.SetOverridden(false);
 					music_fm4.SetResting(true);
 
@@ -411,8 +459,12 @@ bool Track::CoordFlag(const unsigned int flag)
 		{
 			const unsigned char value = *data_pointer++;
 
-			for (Track *track = &state->tracks[MUSIC_BEGIN]; track != &state->tracks[MUSIC_END]; ++track)
-				track->tempo_divider = value;
+			state->tracks.music.Iterate(
+				[&](Track &track)
+				{
+					track.tempo_divider = value;
+				}
+			);
 
 			break;
 		}
@@ -486,7 +538,7 @@ bool Track::CoordFlag(const unsigned int flag)
 			{
 				Track *track;
 #ifdef SMPS_EnableSpecSFX
-				auto &special_fm4 = state->tracks[SPECIAL_SFX_FM4];
+				auto &special_fm4 = state->tracks.special_sfx.fm4;
 
 				if (voice_control == 4 && special_fm4.IsPlaying())
 				{
@@ -495,7 +547,7 @@ bool Track::CoordFlag(const unsigned int flag)
 				else
 #endif
 				{
-					track = &state->tracks[SFX_BGMChannelRAM[voice_control - 2]];
+					track = &SFX_BGMChannelRAM(voice_control - 2);
 
 					if (!track->IsPlaying())
 						return false;
@@ -515,13 +567,13 @@ bool Track::CoordFlag(const unsigned int flag)
 			{
 				Track *track;
 #ifdef SMPS_EnableSpecSFX
-				auto &special_psg3 = state->tracks[SPECIAL_SFX_PSG3];
+				auto &special_psg3 = state->tracks.special_sfx.psg3;
 
 				if ((voice_control == 0xC0 || voice_control == 0xE0) && special_psg3.IsPlaying())
 					track = &special_psg3;
 				else
 #endif
-					track = &state->tracks[SFX_BGMChannelRAM[voice_control >> 5]]; // TODO: Cast to unsigned integer?
+					track = &SFX_BGMChannelRAM(voice_control >> 5); // TODO: Cast to unsigned integer?
 
 				track->SetOverridden(false);
 				track->SetResting(true);
@@ -831,7 +883,8 @@ std::optional<unsigned int> Track::DoModulationEnvelope()
 
 bool Track::IsMusic() const
 {
-	return this < &state->tracks[SFX_BEGIN];
+	// TODO: Replace this with something saner.
+	return static_cast<const void*>(this) < static_cast<const void*>(&state->tracks.sfx);
 }
 
 void Track::ReloadModulationData()
@@ -868,7 +921,7 @@ void Track::DACUpdateSample()
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			if (state->tracks[MUSIC_DAC].IsFM6Overridden())
+			if (state->tracks.music.dac.IsFM6Overridden())
 			{
 				z80_bus.WriteFMI(0x2B, 0x80);
 				z80_bus.WriteFMII(0xB6, ams_fms_pan);
@@ -878,10 +931,10 @@ void Track::DACUpdateSample()
 		}
 	);
 
-	if (state->tracks[MUSIC_DAC].IsFM6Overridden())
+	if (state->tracks.music.dac.IsFM6Overridden())
 	{
-		state->tracks[MUSIC_DAC].SetFM6Overridden(false);
-		state->tracks[MUSIC_FM6].SetFM6Overridden(true);
+		state->tracks.music.dac.SetFM6Overridden(false);
+		state->tracks.music.FM6().SetFM6Overridden(true);
 	}
 
 #ifdef SMPS_SoundTest
@@ -1206,8 +1259,8 @@ void Track::FMNoteOn()
 
 	if (voice_control == 6 && IsFM6Overridden())
 	{
-		state->tracks[MUSIC_FM6].SetFM6Overridden(false);
-		state->tracks[MUSIC_DAC].SetFM6Overridden(true);
+		state->tracks.music.FM6().SetFM6Overridden(false);
+		state->tracks.music.dac.SetFM6Overridden(true);
 	}
 }
 
@@ -1590,8 +1643,12 @@ static void InitMusicPlayback()
 	state->variables.queue = queue;
 
 	// Clear music track RAM.
-	for (Track *track = &state->tracks[MUSIC_BEGIN]; track != &state->tracks[MUSIC_END]; ++track)
-		*track = {};
+	state->tracks.music.Iterate(
+		[](Track &track)
+		{
+			track = {};
+		}
+	);
 
 	// Reset DAC volume.
 	WriteDACVolume(0);
@@ -1604,22 +1661,24 @@ static void InitMusicPlayback()
 	// calls to FMSilenceAll/PSGSilenceAll, this will cause hanging
 	// notes.
 	// To fix this, we'll just forcefully set all channels, here:
-	for (unsigned int i = 0; i < MUSIC_TRACK_COUNT; ++i)
-	{
-		static constexpr std::array<unsigned char, MUSIC_TRACK_COUNT> ChannelInitBytes = {
-			6 | 0x10, 0, 1, 2, 4, 5, 6,
-			0x80, 0xA0, 0xC0,
-		#ifdef SMPS_EnablePSGNoiseDrums
-			0xE0,
-		#endif
-		#ifdef SMPS_EnablePWM
-			0 | 8, 2 | 8, 4 | 8, 6 | 8
-		#endif
-		};
+	static constexpr auto ChannelInitBytes = std::to_array<unsigned char>({
+		6 | 0x10, 0, 1, 2, 4, 5, 6,
+		0x80, 0xA0, 0xC0,
+	#ifdef SMPS_EnablePSGNoiseDrums
+		0xE0,
+	#endif
+	#ifdef SMPS_EnablePWM
+		0 | 8, 2 | 8, 4 | 8, 6 | 8
+	#endif
+	});
 
-		Track &track = state->tracks[MUSIC_BEGIN + i];
-		track.voice_control = ChannelInitBytes[i];
-	}
+	auto it = std::begin(ChannelInitBytes);
+	state->tracks.music.Iterate(
+		[&it](Track &track)
+		{
+			track.voice_control = *it++;
+		}
+	);
 }
 
 static void Sound_PlayBGM(const unsigned int id)
@@ -1632,18 +1691,20 @@ static void Sound_PlayBGM(const unsigned int id)
 		{
 			state->variables.playing_1up = true;
 
-			for (Track *track = &state->tracks[MUSIC_BEGIN]; track != &state->tracks[MUSIC_END]; ++track)
-			{
-				// Back-up the 'is playing' flag to the 'is overridden' flag.
-				track->SetOverridden(track->IsPlaying());
+			state->tracks.music.Iterate(
+				[](Track &track)
+				{
+					// Back-up the 'is playing' flag to the 'is overridden' flag.
+					track.SetOverridden(track.IsPlaying());
 
-				// Disable the track, so that nothing updates it whilst it is backed-up.
-				track->SetPlaying(false);
-			}
+					// Disable the track, so that nothing updates it whilst it is backed-up.
+					track.SetPlaying(false);
+				}
+			);
 
 			state->variables.sndprio = 0;
 
-			std::copy(&state->tracks[MUSIC_BEGIN], &state->tracks[MUSIC_END], &state->tracks[BACKUP_BEGIN]);
+			state->tracks.music_backup = state->tracks.music;
 			state->variables_backup = state->variables;
 		}
 	}
@@ -1688,79 +1749,95 @@ static void Sound_PlayBGM(const unsigned int id)
 	state->variables.main_tempo_timeout = 0;
 	state->variables.pal_audio_countdown = 5;
 
-	for (Track *track = &state->tracks[MUSIC_FM_DAC_BEGIN]; track != &state->tracks[MUSIC_FM_DAC_BEGIN + total_dac_and_fm_tracks]; ++track)
+	const auto &DoDACOrFM = [&](Track &track)
 	{
-		track->SetPlaying(true);
-		track->tempo_divider = tempo_divider;
-		track->stack_pointer = track->go_sub_stack.size();
-		track->ams_fms_pan = 0xC0;
-		track->duration_timeout = 1;
-		track->data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
-		track->transpose = track_header[2];
-		track->volume = track_header[3];
-		track->voice_ptr = voices;
+		track.SetPlaying(true);
+		track.tempo_divider = tempo_divider;
+		track.stack_pointer = track.go_sub_stack.size();
+		track.ams_fms_pan = 0xC0;
+		track.duration_timeout = 1;
+		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
+		track.transpose = track_header[2];
+		track.volume = track_header[3];
+		track.voice_ptr = voices;
 
 		track_header += 4;
+	};
+
+	for (unsigned int i = 0; i < total_dac_and_fm_tracks; ++i)
+	{
+		if (i == 0)
+			DoDACOrFM(state->tracks.music.dac);
+		else
+			DoDACOrFM(state->tracks.music.fm[i - 1]);
 	}
 
-	state->tracks[MUSIC_DAC].SetFM6Overridden(true);
-	state->tracks[MUSIC_FM6].SetFM6Overridden(true);
+	state->tracks.music.dac.SetFM6Overridden(true);
+	state->tracks.music.FM6().SetFM6Overridden(true);
 
-	for (Track *track = &state->tracks[MUSIC_PSG_BEGIN]; track != &state->tracks[MUSIC_PSG_BEGIN + total_psg_tracks]; ++track)
+	for (unsigned int i = 0; i < total_psg_tracks; ++i)
 	{
-		track->SetPlaying(true);
-		track->tempo_divider = tempo_divider;
-		track->stack_pointer = track->go_sub_stack.size();
-		track->duration_timeout = 1;
-		track->data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
-		track->transpose = track_header[2];
-		track->volume = track_header[3];
+		Track &track = state->tracks.music.psg[i];
+
+		track.SetPlaying(true);
+		track.tempo_divider = tempo_divider;
+		track.stack_pointer = track.go_sub_stack.size();
+		track.duration_timeout = 1;
+		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
+		track.transpose = track_header[2];
+		track.volume = track_header[3];
 #ifdef SMPS_EnableModulationEnvelopes
-		track->modulation_ctrl = track_header[4];
+		track.modulation_ctrl = track_header[4];
 #endif
-		track->voice_index = track_header[5];
+		track.voice_index = track_header[5];
 
 		track_header += 6;
 	}
 
 #ifdef SMPS_EnablePWM
-	for (Track *track = &state->tracks[MUSIC_PWM_BEGIN]; track != &state->tracks[MUSIC_PWM_BEGIN + total_pwm_tracks]; ++track)
+	for (unsigned int i = 0; i < total_pwm_tracks; ++i)
 	{
-		track->SetPlaying(true);
-		track->tempo_divider = tempo_divider;
-		track->stack_pointer = track->go_sub_stack.size();
-		track->duration_timeout = 1;
-		track->data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
-		track->transpose = track_header[2];
-		track->volume = track_header[3];
+		Track &track = state->tracks.music.pwm[i];
+
+		track.SetPlaying(true);
+		track.tempo_divider = tempo_divider;
+		track.stack_pointer = track.go_sub_stack.size();
+		track.duration_timeout = 1;
+		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
+		track.transpose = track_header[2];
+		track.volume = track_header[3];
 
 		track_header += 4;
 	}
 #endif
 
-	for (Track *track = &state->tracks[SFX_BEGIN]; track != &state->tracks[SFX_END]; ++track)
-		if (track->IsPlaying())
-			state->tracks[SFX_BGMChannelRAM[track->IsPSG() ? track->voice_control >> 5 : track->voice_control - 2]].SetOverridden(true);
+	state->tracks.sfx.Iterate(
+		[](Track &track)
+		{
+			if (track.IsPlaying())
+				SFX_BGMChannelRAM(track.IsPSG() ? track.voice_control >> 5 : track.voice_control - 2).SetOverridden(true);
+		}
+	);
 
 #ifdef SMPS_EnableSpecSFX
-	if (state->tracks[SPECIAL_SFX_FM4].IsPlaying())
-		state->tracks[MUSIC_FM4].SetOverridden(true);
+	if (state->tracks.special_sfx.fm4.IsPlaying())
+		state->tracks.music.FM4().SetOverridden(true);
 
-	if (state->tracks[SPECIAL_SFX_PSG3].IsPlaying())
-		state->tracks[MUSIC_PSG3].SetOverridden(true);
+	if (state->tracks.special_sfx.psg3.IsPlaying())
+		state->tracks.music.PSG3().SetOverridden(true);
 #endif
 
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			for (Track *track = &state->tracks[MUSIC_FM_BEGIN]; track != &state->tracks[MUSIC_FM_END]; ++track)
-				if (!track->IsOverridden())
-					track->FMSilenceChannel(z80_bus);
+			for (Track &track : state->tracks.music.fm)
+				if (!track.IsOverridden())
+					track.FMSilenceChannel(z80_bus);
 		}
 	);
 
-	for (Track *track = &state->tracks[MUSIC_PSG_BEGIN]; track != &state->tracks[MUSIC_PSG_END]; ++track)
-		track->PSGNoteOff();
+	for (Track &track : state->tracks.music.psg)
+		track.PSGNoteOff();
 
 #ifdef SMPS_EnablePWM
 	PWMSilenceAll();
@@ -1853,13 +1930,13 @@ static void Sound_PlaySFX(const unsigned int id)
 		{
 			// FM
 			track_lookup_index = voice_control - 2;
-			state->tracks[SFX_BGMChannelRAM[track_lookup_index]].SetOverridden(true);
+			SFX_BGMChannelRAM(track_lookup_index).SetOverridden(true);
 		}
 		else
 		{
 			// PSG
 			track_lookup_index = voice_control >> 5; // TODO: Cast to unsigned integer?
-			state->tracks[SFX_BGMChannelRAM[track_lookup_index]].SetOverridden(true);
+			SFX_BGMChannelRAM(track_lookup_index).SetOverridden(true);
 
 			// Silence PSG channel.
 			ClownMDSDK::MainCPU::PSG::Write(voice_control | 0x1F);
@@ -1869,7 +1946,7 @@ static void Sound_PlaySFX(const unsigned int id)
 				ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F);
 		}
 
-		auto &track = state->tracks[SFX_SFXChannelRAM[track_lookup_index]];
+		auto &track = SFX_SFXChannelRAM(track_lookup_index);
 
 		track = {};
 
@@ -1898,11 +1975,11 @@ static void Sound_PlaySFX(const unsigned int id)
 	}
 
 #ifdef SMPS_EnableSpecSFX
-	if (state->tracks[SFX_FM4].IsPlaying())
-		state->tracks[SPECIAL_SFX_FM4].SetOverridden(true);
+	if (state->tracks.sfx.FM4().IsPlaying())
+		state->tracks.special_sfx.fm4.SetOverridden(true);
 
-	if (state->tracks[SFX_PSG3].IsPlaying())
-		state->tracks[SPECIAL_SFX_PSG3].SetOverridden(true);
+	if (state->tracks.sfx.PSG3().IsPlaying())
+		state->tracks.special_sfx.psg3.SetOverridden(true);
 #endif
 }
 
@@ -1929,14 +2006,14 @@ static void Sound_PlaySpecial(const unsigned int id)
 			if (voice_control < 0x80)
 			{
 				// FM
-				state->tracks[MUSIC_FM4].SetOverridden(true);
-				return state->tracks[SPECIAL_SFX_FM4];
+				state->tracks.music.FM4().SetOverridden(true);
+				return state->tracks.special_sfx.fm4;
 			}
 			else
 			{
 				// PSG
-				state->tracks[MUSIC_PSG3].SetOverridden(true);
-				return state->tracks[SPECIAL_SFX_PSG3];
+				state->tracks.music.PSG3().SetOverridden(true);
+				return state->tracks.special_sfx.psg3;
 			}
 		}();
 
@@ -1960,13 +2037,13 @@ static void Sound_PlaySpecial(const unsigned int id)
 		track_header += 6;
 	}
 
-	if (state->tracks[SFX_FM4].IsPlaying())
-		state->tracks[SPECIAL_SFX_FM4].SetOverridden(true);
+	if (state->tracks.sfx.FM4().IsPlaying())
+		state->tracks.special_sfx.fm4.SetOverridden(true);
 
-	if (state->tracks[SFX_PSG3].IsPlaying())
-		state->tracks[SPECIAL_SFX_PSG3].SetOverridden(true);
+	if (state->tracks.sfx.PSG3().IsPlaying())
+		state->tracks.special_sfx.psg3.SetOverridden(true);
 
-	if (!state->tracks[SFX_PSG3].IsPlaying())
+	if (!state->tracks.sfx.PSG3().IsPlaying())
 	{
 		ClownMDSDK::MainCPU::PSG::Write(0xC0 | 0x1F);
 		ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F);
@@ -1993,23 +2070,23 @@ static void Sound_PlayCommand(const unsigned int id)
 			LockZ80BusFMSafe(
 				[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 				{
-					for (Track *track = &state->tracks[SFX_FM_BEGIN]; track != &state->tracks[SFX_FM_END]; ++track)
+					for (Track &track : state->tracks.sfx.fm)
 					{
-						if (track->IsPlaying())
+						if (track.IsPlaying())
 						{
-							track->SetPlaying(false);
-							track->SetHeld(false);
+							track.SetPlaying(false);
+							track.SetHeld(false);
 
-							track->FMNoteOff(z80_bus);
+							track.FMNoteOff(z80_bus);
 
 							Track &other_track =
 
 							#ifdef SMPS_EnableSpecSFX
-								track->voice_control == 4 && state->tracks[SPECIAL_SFX_FM4].IsPlaying()
-								? state->tracks[SPECIAL_SFX_FM4]
+								track.voice_control == 4 && state->tracks.special_sfx.fm4.IsPlaying()
+								? state->tracks.special_sfx.fm4
 								:
 							#endif
-								state->tracks[SFX_BGMChannelRAM[track->voice_control - 2]];
+								SFX_BGMChannelRAM(track.voice_control - 2);
 
 							if (other_track.IsOverridden())
 							{
@@ -2022,23 +2099,23 @@ static void Sound_PlayCommand(const unsigned int id)
 				}
 			);
 
-			for (Track *track = &state->tracks[SFX_PSG_BEGIN]; track != &state->tracks[SFX_PSG_END]; ++track)
+			for (Track &track : state->tracks.sfx.psg)
 			{
-				if (track->IsPlaying())
+				if (track.IsPlaying())
 				{
-					track->SetPlaying(false);
-					track->SetHeld(false);
+					track.SetPlaying(false);
+					track.SetHeld(false);
 
-					track->PSGNoteOff();
+					track.PSGNoteOff();
 
 					Track &other_track =
 
 					#ifdef SMPS_EnableSpecSFX
-						(track->voice_control == 0xC0 || track->voice_control == 0xE0) && state->tracks[SPECIAL_SFX_PSG3].IsPlaying()
-						? state->tracks[SPECIAL_SFX_PSG3]
+						(track.voice_control == 0xC0 || track.voice_control == 0xE0) && state->tracks.special_sfx.psg3.IsPlaying()
+						? state->tracks.special_sfx.psg3
 						:
 					#endif
-						state->tracks[SFX_BGMChannelRAM[track->voice_control >> 5]];
+						SFX_BGMChannelRAM(track.voice_control >> 5);
 
 					if (other_track.IsOverridden())
 					{
@@ -2056,7 +2133,7 @@ static void Sound_PlayCommand(const unsigned int id)
 	#ifdef SMPS_EnableSpecSFX
 		case 3: // SpecStopSFX
 		{
-			Track &background_sfx_fm4 = state->tracks[SPECIAL_SFX_FM4];
+			Track &background_sfx_fm4 = state->tracks.special_sfx.fm4;
 
 			if (background_sfx_fm4.IsPlaying())
 			{
@@ -2069,7 +2146,7 @@ static void Sound_PlayCommand(const unsigned int id)
 						{
 							background_sfx_fm4.SendFMNoteOff(z80_bus);
 
-							Track &music_fm4 = state->tracks[MUSIC_FM4];
+							Track &music_fm4 = state->tracks.music.FM4();
 							music_fm4.SetOverridden(false);
 							music_fm4.SetResting(true);
 
@@ -2080,7 +2157,7 @@ static void Sound_PlayCommand(const unsigned int id)
 				}
 			}
 
-			Track &background_sfx_psg3 = state->tracks[SPECIAL_SFX_PSG3];
+			Track &background_sfx_psg3 = state->tracks.special_sfx.psg3;
 
 			if (background_sfx_psg3.IsPlaying())
 			{
@@ -2090,7 +2167,7 @@ static void Sound_PlayCommand(const unsigned int id)
 				{
 					background_sfx_psg3.SendPSGNoteOff();
 
-					Track &music_psg3 = state->tracks[MUSIC_PSG3];
+					Track &music_psg3 = state->tracks.music.PSG3();
 					music_psg3.SetOverridden(false);
 					music_psg3.SetResting(true);
 
@@ -2209,8 +2286,14 @@ static void TempoWait()
 	state->variables.main_tempo_timeout = tempo_sum % 0x100;
 
 	if (tempo_sum >= 0x100)
-		for (Track *track = &state->tracks[MUSIC_BEGIN]; track != &state->tracks[MUSIC_END]; ++track)
-			++track->duration_timeout;
+	{
+		state->tracks.music.Iterate(
+			[](Track &track)
+			{
+				++track.duration_timeout;
+			}
+		);
+	}
 }
 
 static void UpdateMusic();
@@ -2228,19 +2311,19 @@ static void DoMusicTempoSpeedup()
 
 static void UpdateMusic()
 {
-	if (state->tracks[MUSIC_DAC].IsPlaying())
-		state->tracks[MUSIC_DAC].DACUpdateTrack();
+	if (state->tracks.music.dac.IsPlaying())
+		state->tracks.music.dac.DACUpdateTrack();
 
-	for (Track *track = &state->tracks[MUSIC_FM_BEGIN]; track != &state->tracks[MUSIC_FM_END]; ++track)
-		if (track->IsPlaying())
-			track->FMUpdateTrack();
+	for (Track &track : state->tracks.music.fm)
+		if (track.IsPlaying())
+			track.FMUpdateTrack();
 
-	for (Track *track = &state->tracks[MUSIC_PSG_BEGIN]; track != &state->tracks[MUSIC_PSG_END]; ++track)
-		if (track->IsPlaying())
-			track->PSGUpdateTrack();
+	for (Track &track : state->tracks.music.psg)
+		if (track.IsPlaying())
+			track.PSGUpdateTrack();
 #ifdef SMPS_EnablePSGNoiseDrums
-	if (state->tracks[MUSIC_PSG_NOISE].IsPlaying())
-		state->tracks[MUSIC_PSG_NOISE].PSGNoiseUpdateTrack();
+	if (state.tracks.music.psg_noise.IsPlaying())
+		state->tracks.music.psg_noise.PSGNoiseUpdateTrack();
 #endif
 	TempoWait();
 
@@ -2249,21 +2332,23 @@ static void UpdateMusic()
 
 	if (state->variables.fade_to_previous_pending)
 	{
-		std::copy(&state->tracks[BACKUP_BEGIN], &state->tracks[BACKUP_END], &state->tracks[MUSIC_BEGIN]);
+		state->tracks.music = state->tracks.music_backup;
 		state->variables = state->variables_backup;
 
-		for (Track *track = &state->tracks[MUSIC_BEGIN]; track != &state->tracks[MUSIC_END]; ++track)
-		{
-			// Back-up the 'is playing' flag to the 'is overridden' flag.
-			track->SetPlaying(track->IsOverridden());
+		state->tracks.music.Iterate(
+			[](Track &track)
+			{
+				// Back-up the 'is playing' flag to the 'is overridden' flag.
+				track.SetPlaying(track.IsOverridden());
 
-			// Disable the track, so that nothing updates it whilst it is backed-up.
-			track->SetOverridden(false);
-		}
+				// Disable the track, so that nothing updates it whilst it is backed-up.
+				track.SetOverridden(false);
+			}
+		);
 
 		state->variables.fadein_counter = 0x28;
 
-		Track* const dac_track = &state->tracks[MUSIC_DAC];
+		Track* const dac_track = &state->tracks.music.dac;
 
 		LockZ80BusFMSafe(
 			[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -2271,31 +2356,31 @@ static void UpdateMusic()
 				if (dac_track->IsPlaying())
 					dac_track->SetDACVolume(z80_bus);
 
-				for (Track *fm_track = &state->tracks[MUSIC_FM_BEGIN]; fm_track != &state->tracks[MUSIC_FM_END]; ++fm_track)
+				for (Track &fm_track : state->tracks.music.fm)
 				{
-					if (fm_track->IsPlaying())
+					if (fm_track.IsPlaying())
 					{
-						fm_track->SetResting(true);
-						fm_track->SetVoice(z80_bus);
+						fm_track.SetResting(true);
+						fm_track.SetVoice(z80_bus);
 					}
 				}
 			}
 		);
 
-		for (Track *psg_track = &state->tracks[MUSIC_PSG_BEGIN]; psg_track != &state->tracks[MUSIC_PSG_END]; ++psg_track)
+		for (Track &psg_track : state->tracks.music.psg)
 		{
-			if (psg_track->IsPlaying())
+			if (psg_track.IsPlaying())
 			{
-				psg_track->SetResting(true);
-				psg_track->PSGNoteOff();
+				psg_track.SetResting(true);
+				psg_track.PSGNoteOff();
 
-				if (psg_track->voice_control == 0xE0)
-					ClownMDSDK::MainCPU::PSG::Write(psg_track->psg_noise);
+				if (psg_track.voice_control == 0xE0)
+					ClownMDSDK::MainCPU::PSG::Write(psg_track.psg_noise);
 			}
 		}
 
-		state->tracks[MUSIC_DAC].SetFM6Overridden(true);
-		state->tracks[MUSIC_FM6].SetFM6Overridden(true);
+		state->tracks.music.dac.SetFM6Overridden(true);
+		state->tracks.music.FM6().SetFM6Overridden(true);
 
 		state->variables.playing_1up = false;
 	}
@@ -2312,7 +2397,7 @@ static void DoFadeIn()
 	--state->variables.fadein_counter;
 	state->variables.fadein_delay = 2;
 
-	Track* const dac_track = &state->tracks[MUSIC_DAC];
+	Track* const dac_track = &state->tracks.music.dac;
 
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -2320,42 +2405,42 @@ static void DoFadeIn()
 			if (dac_track->IsPlaying())
 				dac_track->SetDACVolume(z80_bus);
 
-			const auto FMLoop = [&](const unsigned int first_track_index, const unsigned int last_track_index)
+			const auto DoFM = [&](Track &track)
 			{
-				for (Track *track = &state->tracks[first_track_index]; track != &state->tracks[last_track_index]; ++track)
-					if (track->IsPlaying())
-						track->SendVoiceTL(z80_bus);
+				if (track.IsPlaying())
+					track.SendVoiceTL(z80_bus);
 			};
 
-			FMLoop(MUSIC_FM_BEGIN, MUSIC_FM_END);
-			FMLoop(SFX_FM_BEGIN, SFX_FM_END);
+			for (Track &track : state->tracks.music.fm)
+				DoFM(track);
+			for (Track &track : state->tracks.sfx.fm)
+				DoFM(track);
 		#ifdef SMPS_EnableSpecSFX
-			FMLoop(SPECIAL_SFX_FM_BEGIN, SPECIAL_SFX_FM_END);
+			DoFM(state->tracks.special_sfx.fm4);
 		#endif
 		}
 	);
 
-	const auto PSGLoop = [&](const unsigned int first_track_index, const unsigned int last_track_index)
+	const auto DoPSG = [&](Track &track)
 	{
-		for (Track *track = &state->tracks[first_track_index]; track != &state->tracks[last_track_index]; ++track)
+		if (track.IsPlaying())
 		{
-			if (track->IsPlaying())
-			{
-				// If a volume envelope is active, then it will handle updating the volume for us.
-				// Doing it manually will just conflict with it.
-				if (track->voice_index == 0)
-					track->SetPSGVolume(track->volume);
-			}
+			// If a volume envelope is active, then it will handle updating the volume for us.
+			// Doing it manually will just conflict with it.
+			if (track.voice_index == 0)
+				track.SetPSGVolume(track.volume);
 		}
 	};
 
-	PSGLoop(MUSIC_PSG_BEGIN, MUSIC_PSG_END);
+	for (Track &track : state->tracks.music.psg)
+		DoPSG(track);
 #ifdef SMPS_EnablePSGNoiseDrums
-	PSGLoop(MUSIC_PSG_NOISE, MUSIC_PSG_NOISE + 1);
+	DoPSG(state->tracks.music.psg_noise);
 #endif
-	PSGLoop(SFX_PSG_BEGIN, SFX_PSG_END);
+	for (Track &track : state->tracks.sfx.psg)
+		DoPSG(track);
 #ifdef SMPS_EnableSpecSFX
-	PSGLoop(SPECIAL_SFX_PSG_BEGIN, SPECIAL_SFX_PSG_END);
+	DoPSG(state->tracks.special_sfx.psg3);
 #endif
 }
 
@@ -2375,7 +2460,7 @@ static void DoFadeOut()
 
 	state->variables.fadeout_delay = 3;
 
-	Track* const dac_track = &state->tracks[MUSIC_DAC];
+	Track* const dac_track = &state->tracks.music.dac;
 
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -2390,43 +2475,43 @@ static void DoFadeOut()
 					dac_track->SetDACVolume(z80_bus);
 			}
 
-			for (Track *fm_track = &state->tracks[MUSIC_FM_BEGIN]; fm_track != &state->tracks[MUSIC_FM_END]; ++fm_track)
+			for (Track &fm_track : state->tracks.music.fm)
 			{
-				if (fm_track->IsPlaying())
+				if (fm_track.IsPlaying())
 				{
-					++fm_track->volume;
+					++fm_track.volume;
 
-					if (fm_track->volume >= 0x80)
-						fm_track->SetPlaying(false);
+					if (fm_track.volume >= 0x80)
+						fm_track.SetPlaying(false);
 					else
-						fm_track->SendVoiceTL(z80_bus);
+						fm_track.SendVoiceTL(z80_bus);
 				}
 			}
 		}
 	);
 
-	for (Track *psg_track = &state->tracks[MUSIC_PSG_BEGIN]; psg_track != &state->tracks[MUSIC_PSG_END]; ++psg_track)
+	for (Track &psg_track : state->tracks.music.psg)
 	{
-		if (psg_track->IsPlaying())
+		if (psg_track.IsPlaying())
 		{
-			psg_track->volume += 4;
+			psg_track.volume += 4;
 
-			if (psg_track->volume >= 0x80)
+			if (psg_track.volume >= 0x80)
 			{
-				psg_track->SetPlaying(false);
+				psg_track.SetPlaying(false);
 			}
 			else
 			{
 				// If a volume envelope is active, then it will handle updating the volume for us.
 				// Doing it manually will just conflict with it.
-				if (psg_track->voice_index == 0)
-					psg_track->SetPSGVolume(psg_track->volume);
+				if (psg_track.voice_index == 0)
+					psg_track.SetPSGVolume(psg_track.volume);
 			}
 		}
 	}
 
 #ifdef SMPS_EnablePSGNoiseDrums
-	auto* const psg_track = &state->tracks[MUSIC_PSG_NOISE];
+	auto* const psg_track = &state->tracks.music.psg_noise;
 
 	if (psg_track->IsPlaying())
 	{
@@ -2456,11 +2541,10 @@ static void HandlePause()
 	}
 	else
 	{
-		const auto RestoreFMTrackVoices = [&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigned int begin, const unsigned int end)
+		const auto RestoreFMTrackVoice = [](ClownMDSDK::MainCPU::Z80::Bus &z80_bus, Track &track)
 		{
-			for (Track *track = &state->tracks[begin]; track != &state->tracks[end]; ++track)
-				if (track->IsPlaying() && !track->IsOverridden())
-					track->SetVoice(z80_bus);
+			if (track.IsPlaying() && !track.IsOverridden())
+				track.SetVoice(z80_bus);
 		};
 
 		state->pause = 0;
@@ -2468,14 +2552,16 @@ static void HandlePause()
 		LockZ80BusFMSafe(
 			[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 			{
-				RestoreFMTrackVoices(z80_bus, MUSIC_FM_BEGIN, MUSIC_FM_END);
-				RestoreFMTrackVoices(z80_bus, SFX_FM_BEGIN, SFX_FM_END);
+				for (Track &track : state->tracks.music.fm)
+					RestoreFMTrackVoice(z80_bus, track);
+				for (Track &track : state->tracks.sfx.fm)
+					RestoreFMTrackVoice(z80_bus, track);
 #ifdef SMPS_EnableSpecSFX
-				RestoreFMTrackVoices(z80_bus, SPECIAL_SFX_FM_BEGIN, SPECIAL_SFX_FM_END);
+				RestoreFMTrackVoice(z80_bus, state->tracks.special_sfx.fm4);
 #endif
 
-				// Apply DAC panning if necessary (RestoreFMTrackVoices already reapplied FM6's panning).
-				auto &dac_track = state->tracks[MUSIC_DAC];
+				// Apply DAC panning if necessary (RestoreFMTrackVoice already reapplied FM6's panning).
+				auto &dac_track = state->tracks.music.dac;
 				if (dac_track.IsPlaying() && !dac_track.IsOverridden() && !dac_track.IsFM6Overridden())
 					z80_bus.WriteFMII(0xB6, dac_track.ams_fms_pan);
 
@@ -2524,20 +2610,20 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 
 	UpdateMusic();
 
-	for (Track *track = &state->tracks[SFX_FM_BEGIN]; track != &state->tracks[SFX_FM_END]; ++track)
-		if (track->IsPlaying())
-			track->FMUpdateTrack();
+	for (Track &track : state->tracks.sfx.fm)
+		if (track.IsPlaying())
+			track.FMUpdateTrack();
 
-	for (Track *track = &state->tracks[SFX_PSG_BEGIN]; track != &state->tracks[SFX_PSG_END]; ++track)
-		if (track->IsPlaying())
-			track->PSGUpdateTrack();
+	for (Track &track : state->tracks.sfx.psg)
+		if (track.IsPlaying())
+			track.PSGUpdateTrack();
 
 #ifdef SMPS_EnableSpecSFX
-	if (state->tracks[SPECIAL_SFX_FM4].IsPlaying())
-		state->tracks[SPECIAL_SFX_FM4].FMUpdateTrack();
+	if (state->tracks.special_sfx.fm4.IsPlaying())
+		state->tracks.special_sfx.fm4.FMUpdateTrack();
 
-	if (state->tracks[SPECIAL_SFX_PSG3].IsPlaying())
-		state->tracks[SPECIAL_SFX_PSG3].PSGUpdateTrack();
+	if (state->tracks.special_sfx.psg3.IsPlaying())
+		state->tracks.special_sfx.psg3.PSGUpdateTrack();
 #endif
 }
 

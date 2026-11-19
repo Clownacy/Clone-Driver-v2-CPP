@@ -10,39 +10,109 @@ register State* state asm("a5");
 
 STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, const bool modulation)
 {
-	static constexpr auto track_map = std::to_array<unsigned int>({
-		MUSIC_DAC,
-		MUSIC_FM1,
-		MUSIC_FM2,
-		MUSIC_FM3,
-		MUSIC_FM4,
-		MUSIC_FM5,
-		MUSIC_FM6,
-		MUSIC_PSG1,
-		MUSIC_PSG2,
-		MUSIC_PSG3,
+	const auto &TrackMap = [](unsigned int index) -> Track&
+	{
+		if (index == 0)
+			return state->tracks.music.dac;
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.music.FM1();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.music.FM2();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.music.FM3();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.music.FM4();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.music.FM5();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.music.FM6();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.music.PSG1();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.music.PSG2();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.music.PSG3();
 
 	#ifdef SMPS_EnablePSGNoiseDrums
-		MUSIC_PSG_NOISE,
+		--index;
+
+		if (index == 0)
+			return state->tracks.music.psg_noise();
 	#endif
 
-		SFX_FM3,
-		SFX_FM4,
-		SFX_FM5,
-		SFX_PSG1,
-		SFX_PSG2,
-		SFX_PSG3,
+		--index;
+
+		if (index == 0)
+			return state->tracks.sfx.FM3();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.sfx.FM4();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.sfx.FM4();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.sfx.PSG1();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.sfx.PSG2();
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.sfx.PSG3();
 
 	#ifdef SMPS_EnableSpecSFX
-		SPECIAL_SFX_FM4,
-		SPECIAL_SFX_PSG3,
+		--index;
+
+		if (index == 0)
+			return state->tracks.special_sfx.fm4;
+
+		--index;
+
+		if (index == 0)
+			return state->tracks.special_sfx.psg3;
 	#endif
-	});
 
-	if (track_id >= track_map.size())
-		return 0;
+		std::unreachable();
+	};
 
-	const auto &track = state->tracks[track_map[track_id]];
+	const auto &track = TrackMap(track_id);
 
 	if (!track.IsPlaying())
 		return 0;
@@ -55,7 +125,7 @@ STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, c
 
 	const unsigned int note = [&]() -> unsigned int
 	{
-		if (track_map[track_id] == MUSIC_DAC)
+		if (&TrackMap(track_id) == &state->tracks.music.dac)
 		{
 			// DAC
 			const auto z80_sample_address = []()

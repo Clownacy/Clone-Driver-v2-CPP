@@ -195,108 +195,6 @@ namespace SMPS
 
 	//};
 
-	enum
-	{
-		MUSIC_BEGIN,
-
-		MUSIC_FM_DAC_BEGIN = MUSIC_BEGIN,
-		MUSIC_DAC = MUSIC_FM_DAC_BEGIN,
-
-		MUSIC_FM_BEGIN,
-		MUSIC_FM1 = MUSIC_FM_BEGIN,
-		MUSIC_FM2,
-		MUSIC_FM3,
-		MUSIC_FM4,
-		MUSIC_FM5,
-		MUSIC_FM6,
-		MUSIC_FM_END,
-		MUSIC_FM_TRACK_COUNT = MUSIC_FM_END - MUSIC_FM_BEGIN,
-
-		MUSIC_FM_DAC_END = MUSIC_FM_END,
-		MUSIC_FM_DAC_TRACK_COUNT = MUSIC_FM_DAC_END - MUSIC_FM_DAC_BEGIN,
-
-		MUSIC_PSG_BEGIN = MUSIC_FM_DAC_END,
-		MUSIC_PSG1 = MUSIC_PSG_BEGIN,
-		MUSIC_PSG2,
-		MUSIC_PSG3,
-		MUSIC_PSG_END,
-		MUSIC_PSG_TRACK_COUNT = MUSIC_PSG_END - MUSIC_PSG_BEGIN,
-
-#ifdef SMPS_EnablePSGNoiseDrums
-		MUSIC_PSG_NOISE = MUSIC_PSG_END,
-		MUSIC_END,
-#else
-		MUSIC_END = MUSIC_PSG_END,
-#endif
-		MUSIC_TRACK_COUNT = MUSIC_END - MUSIC_BEGIN,
-
-		BACKUP_BEGIN = MUSIC_END,
-		BACKUP_DAC = BACKUP_BEGIN,
-		BACKUP_FM1,
-		BACKUP_FM2,
-		BACKUP_FM3,
-		BACKUP_FM4,
-		BACKUP_FM5,
-		BACKUP_FM6,
-		BACKUP_PSG1,
-		BACKUP_PSG2,
-		BACKUP_PSG3,
-#ifdef SMPS_EnablePSGNoiseDrums
-		BACKUP_PSG_NOISE,
-#endif
-		BACKUP_END,
-		BACKUP_TRACK_COUNT = BACKUP_END - BACKUP_BEGIN,
-
-		TOTAL_TRACKS = BACKUP_END,
-	};
-
-	enum
-	{
-		NON_BACKUP_TRACKS_BEGIN = MUSIC_BEGIN,
-
-		SFX_BEGIN = BACKUP_BEGIN,
-
-		SFX_FM_BEGIN = SFX_BEGIN,
-		SFX_FM3 = SFX_FM_BEGIN,
-		SFX_FM4,
-		SFX_FM5,
-		SFX_FM_END,
-		SFX_FM_TRACK_COUNT = SFX_FM_END - SFX_FM_BEGIN,
-
-		SFX_PSG_BEGIN = SFX_FM_END,
-		SFX_PSG1 = SFX_PSG_BEGIN,
-		SFX_PSG2,
-		SFX_PSG3,
-		SFX_PSG_END,
-		SFX_PSG_TRACK_COUNT = SFX_PSG_END - SFX_PSG_BEGIN,
-
-		SFX_END = SFX_PSG_END,
-		SFX_TRACK_COUNT = SFX_END - SFX_BEGIN,
-
-	#ifdef SMPS_EnableSpecSFX
-		SPECIAL_SFX_BEGIN = SFX_END,
-
-		SPECIAL_SFX_FM_BEGIN = SPECIAL_SFX_BEGIN,
-		SPECIAL_SFX_FM4 = SPECIAL_SFX_FM_BEGIN,
-		SPECIAL_SFX_FM_END,
-		SPECIAL_SFX_FM_TRACK_COUNT = SPECIAL_SFX_FM_END - SPECIAL_SFX_FM_BEGIN,
-
-		SPECIAL_SFX_PSG_BEGIN = SPECIAL_SFX_FM_END,
-		SPECIAL_SFX_PSG3 = SPECIAL_SFX_PSG_BEGIN,
-		SPECIAL_SFX_PSG_END,
-		SPECIAL_SFX_PSG_TRACK_COUNT = SPECIAL_SFX_PSG_END - SPECIAL_SFX_PSG_BEGIN,
-
-		SPECIAL_SFX_END = SPECIAL_SFX_PSG_END,
-		SPECIAL_SFX_TRACK_COUNT = SPECIAL_SFX_END - SPECIAL_SFX_BEGIN,
-	#endif
-	#ifndef SMPS_EnableSpecSFX
-		NON_BACKUP_TRACKS_END = SFX_END,
-	#else
-		NON_BACKUP_TRACKS_END = SPECIAL_SFX_END,
-	#endif
-		NON_BACKUP_TRACK_COUNT = NON_BACKUP_TRACKS_END - NON_BACKUP_TRACKS_BEGIN
-	};
-
 	struct Queue : public std::array<unsigned short, 4>
 	{
 		bool IsAnythingQueued() const
@@ -342,7 +240,86 @@ namespace SMPS
 
 	struct State
 	{
-		std::array<Track, TOTAL_TRACKS> tracks;
+		struct
+		{
+			struct
+			{
+				Track dac;
+				std::array<Track, 6> fm;
+				std::array<Track, 3> psg;
+			#ifdef SMPS_EnablePSGNoiseDrums
+				Track psg_noise;
+			#endif
+
+				Track& FM1()  { return fm[0]; }
+				Track& FM2()  { return fm[1]; }
+				Track& FM3()  { return fm[2]; }
+				Track& FM4()  { return fm[3]; }
+				Track& FM5()  { return fm[4]; }
+				Track& FM6()  { return fm[5]; }
+				Track& PSG1() { return psg[0]; }
+				Track& PSG2() { return psg[1]; }
+				Track& PSG3() { return psg[2]; }
+
+				void Iterate(const auto &callback)
+				{
+					callback(dac);
+					for (auto &track : fm)
+						callback(track);
+					for (auto &track : psg)
+						callback(track);
+				#ifdef SMPS_EnablePSGNoiseDrums
+					callback(psg_noise);
+				#endif
+				}
+
+				// TODO: Add a 'clear' method?
+			} music, music_backup; 
+
+			struct
+			{
+				std::array<Track, 3> fm;
+				std::array<Track, 3> psg;
+
+				Track& FM3()  { return fm[0]; }
+				Track& FM4()  { return fm[1]; }
+				Track& FM5()  { return fm[2]; }
+				Track& PSG1() { return psg[0]; }
+				Track& PSG2() { return psg[1]; }
+				Track& PSG3() { return psg[2]; }
+
+				void Iterate(const auto &callback)
+				{
+					for (auto &track : fm)
+						callback(track);
+					for (auto &track : psg)
+						callback(track);
+				}
+			} sfx;
+
+		#ifdef SMPS_EnableSpecSFX
+			struct
+			{
+				Track fm4;
+				Track psg3;
+
+				void Iterate(const auto &callback)
+				{
+					callback(fm4);
+					callback(psg3);
+				}
+			} special_sfx;
+		#endif
+
+			void Iterate(const auto &callback)
+			{
+				music.Iterate(callback);
+				sfx.Iterate(callback);
+			#ifdef SMPS_EnableSpecSFX
+				special_sfx.Iterate(callback);
+			#endif
+			}
+		} tracks; 
 
 		Variables variables;
 		Variables variables_backup;

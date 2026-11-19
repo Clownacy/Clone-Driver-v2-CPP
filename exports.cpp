@@ -110,6 +110,28 @@ static constexpr auto CombineText(T &&...arrays)
 	return (... + MakeText(arrays));
 }
 
+static constexpr auto SMPS_MUSIC_FM_TRACK_COUNT = 6;
+static constexpr auto SMPS_MUSIC_FM_DAC_TRACK_COUNT = 1 + SMPS_MUSIC_FM_TRACK_COUNT;
+static constexpr auto SMPS_MUSIC_PSG_TRACK_COUNT = 3;
+#ifdef SMPS_EnablePSGNoiseDrums
+	static constexpr auto SMPS_MUSIC_PSG_NOISE_TRACK_COUNT = 1;
+#else
+	static constexpr auto SMPS_MUSIC_PSG_NOISE_TRACK_COUNT = 0;
+#endif
+static constexpr auto SMPS_SFX_FM_TRACK_COUNT = 3;
+static constexpr auto SMPS_SFX_PSG_TRACK_COUNT = 3;
+#ifdef SMPS_EnableSpecSFX
+	static constexpr auto SMPS_SPECIAL_SFX_FM_TRACK_COUNT = 1;
+	static constexpr auto SMPS_SPECIAL_SFX_PSG_TRACK_COUNT = 1;
+#else
+	static constexpr auto SMPS_SPECIAL_SFX_FM_TRACK_COUNT = 0;
+	static constexpr auto SMPS_SPECIAL_SFX_PSG_TRACK_COUNT = 0;
+#endif
+static constexpr auto SMPS_MUSIC_TRACK_COUNT = SMPS_MUSIC_FM_DAC_TRACK_COUNT + SMPS_MUSIC_PSG_TRACK_COUNT + SMPS_MUSIC_PSG_NOISE_TRACK_COUNT;
+static constexpr auto SMPS_SFX_TRACK_COUNT = SMPS_SFX_FM_TRACK_COUNT + SMPS_SFX_PSG_TRACK_COUNT;
+static constexpr auto SMPS_SPECIAL_SFX_TRACK_COUNT = SMPS_SPECIAL_SFX_FM_TRACK_COUNT + SMPS_SPECIAL_SFX_PSG_TRACK_COUNT;
+static constexpr auto NON_BACKUP_TRACK_COUNT = SMPS_MUSIC_TRACK_COUNT + SMPS_SFX_TRACK_COUNT + SMPS_SPECIAL_SFX_TRACK_COUNT;
+
 __attribute__((section(".exports"))) __attribute__((visibility("default"))) auto text = []()
 {
 	return CombineText(
@@ -120,20 +142,20 @@ __attribute__((section(".exports"))) __attribute__((visibility("default"))) auto
 		"SMPS_RAM_SIZE = ", MakeText<sizeof(SMPS::State)>(), '\n',
 		"SMPS_DAC_BATCH_SIZE = ", MakeText<zBatchSize>(), '\n',
 		"SMPS_DAC_SAMPLE_RATE = ", MakeText<zDriverSampleRate>(), '\n',
-		"SMPS_NON_BACKUP_TRACK_COUNT = ", MakeText<SMPS::NON_BACKUP_TRACK_COUNT>(), '\n',
-		"SMPS_MUSIC_FM_DAC_TRACK_COUNT = ", MakeText<SMPS::MUSIC_FM_DAC_TRACK_COUNT>(), '\n',
-		"SMPS_MUSIC_FM_TRACK_COUNT = ", MakeText<SMPS::MUSIC_FM_TRACK_COUNT>(), '\n',
-		"SMPS_MUSIC_PSG_TRACK_COUNT = ", MakeText<SMPS::MUSIC_PSG_TRACK_COUNT>(), '\n',
-		"SMPS_SFX_FM_TRACK_COUNT = ", MakeText<SMPS::SFX_FM_TRACK_COUNT>(), '\n',
-		"SMPS_SFX_PSG_TRACK_COUNT = ", MakeText<SMPS::SFX_PSG_TRACK_COUNT>(), '\n',
+		"SMPS_NON_BACKUP_TRACK_COUNT = ", MakeText<NON_BACKUP_TRACK_COUNT>(), '\n',
+		"SMPS_MUSIC_FM_DAC_TRACK_COUNT = ", MakeText<SMPS_MUSIC_FM_DAC_TRACK_COUNT>(), '\n',
+		"SMPS_MUSIC_FM_TRACK_COUNT = ", MakeText<SMPS_MUSIC_FM_TRACK_COUNT>(), '\n',
+		"SMPS_MUSIC_PSG_TRACK_COUNT = ", MakeText<SMPS_MUSIC_PSG_TRACK_COUNT>(), '\n',
+		"SMPS_SFX_FM_TRACK_COUNT = ", MakeText<SMPS_SFX_FM_TRACK_COUNT>(), '\n',
+		"SMPS_SFX_PSG_TRACK_COUNT = ", MakeText<SMPS_SFX_PSG_TRACK_COUNT>(), '\n',
 #ifdef SMPS_EnableSpecSFX
-		"SMPS_SPECIAL_SFX_FM_TRACK_COUNT = ", MakeText<SMPS::SPECIAL_SFX_FM_TRACK_COUNT>(), '\n',
-		"SMPS_SPECIAL_SFX_PSG_TRACK_COUNT = ", MakeText<SMPS::SPECIAL_SFX_PSG_TRACK_COUNT>(), '\n',
+		"SMPS_SPECIAL_SFX_FM_TRACK_COUNT = ", MakeText<SMPS_SPECIAL_SFX_FM_TRACK_COUNT>(), '\n',
+		"SMPS_SPECIAL_SFX_PSG_TRACK_COUNT = ", MakeText<SMPS_SPECIAL_SFX_PSG_TRACK_COUNT>(), '\n',
 #endif
-		"SMPS_MUSIC_TRACK_COUNT = ", MakeText<SMPS::MUSIC_TRACK_COUNT>(), '\n',
-		"SMPS_SFX_TRACK_COUNT = ", MakeText<SMPS::SFX_TRACK_COUNT>(), '\n',
+		"SMPS_MUSIC_TRACK_COUNT = ", MakeText<SMPS_MUSIC_TRACK_COUNT>(), '\n',
+		"SMPS_SFX_TRACK_COUNT = ", MakeText<SMPS_SFX_TRACK_COUNT>(), '\n',
 #ifdef SMPS_EnableSpecSFX
-		"SMPS_SPECIAL_SFX_TRACK_COUNT = ", MakeText<SMPS::SPECIAL_SFX_TRACK_COUNT>(), '\n',
+		"SMPS_SPECIAL_SFX_TRACK_COUNT = ", MakeText<SMPS_SPECIAL_SFX_TRACK_COUNT>(), '\n',
 #endif
 #ifdef SMPS_EnablePWM
 		"SMPS_FEATURE_PWM = 1\n"
