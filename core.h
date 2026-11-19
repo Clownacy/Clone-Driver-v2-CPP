@@ -73,30 +73,35 @@ namespace SMPS
 		unsigned char volume;
 		unsigned char voice_index;
 		const unsigned char *data_pointer;
+
 		unsigned short freq;
+		signed char detune;
+
 		unsigned char stack_pointer;
+
 		unsigned char duration_timeout;
 		unsigned char saved_duration;
+
 		unsigned char note_timeout;
 		unsigned char note_timeout_master;
+
 		const ModulationSettings *modulation_ptr;
 		ModulationSettings modulation;
+
 		unsigned short modulation_val;
 	#ifdef SMPS_EnableModulationEnvelopes
 		unsigned char modulation_ctrl;
 		unsigned char mod_env_index;
 		unsigned char mod_env_sens;
 	#endif
-		signed char detune;
 
 		union
 		{
-			std::array<unsigned char, 3 * 4> loop_counters;
 			std::array<const unsigned char*, 3> go_sub_stack;
+			std::array<unsigned char, sizeof(go_sub_stack)> loop_counters;
 		};
 
 		// Generic
-		void WriteFMIorII(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, unsigned char port, unsigned char value);
 		void cfJumpTo();
 		void FinishTrackUpdate();
 		void SetDuration(unsigned int duration);
@@ -162,6 +167,8 @@ namespace SMPS
 	struct YM2612Track : Track
 	{
 		unsigned char ams_fms_pan;
+
+		void WriteFMIorII(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, unsigned char port, unsigned char value);
 	};
 
 	struct DACTrack : YM2612Track
@@ -208,10 +215,12 @@ namespace SMPS
 		void SendPSGNoteOff();
 		void PSGNoteOff();
 
+#ifdef SMPS_EnablePSGNoiseDrums
 		// PSG Noise
 		void PSGNoiseUpdateTrack();
 		[[nodiscard]] bool PSGNoiseDoNext();
 		void PSGNoiseSetDrumNote(unsigned char note);
+#endif
 	};
 
 #ifdef SMPS_EnablePWM

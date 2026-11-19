@@ -279,7 +279,7 @@ static void WriteDACVolume(const unsigned int volume)
 // Generic //
 /////////////
 
-void Track::WriteFMIorII(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigned char port, const unsigned char value)
+void YM2612Track::WriteFMIorII(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigned char port, const unsigned char value)
 {
 	const unsigned char complete_port = port | (voice_control & 3);
 
@@ -685,11 +685,17 @@ bool Track::CoordFlag(const unsigned int flag)
 		}
 
 		case 0x17: // cfChanFMCommand
-			LockZ80BusFMSafe(
-				[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+			Visit(
+				[](YM2612Track &track)
 				{
-					WriteFMIorII(z80_bus, data_pointer[0], data_pointer[1]);
-				}
+					LockZ80BusFMSafe(
+						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+						{
+							track.WriteFMIorII(z80_bus, track.data_pointer[0], track.data_pointer[1]);
+						}
+					);
+				},
+				[](auto&) {}
 			);
 			data_pointer += 2;
 			break;
@@ -951,10 +957,8 @@ bool Track::IsMusic() const
 
 void Track::ReloadModulationData()
 {
-	modulation.wait  = modulation_ptr->wait;
-	modulation.speed = modulation_ptr->speed;
-	modulation.delta = modulation_ptr->delta;
-	modulation.steps = modulation_ptr->steps / 2; // TODO: Cast to unsigned integer?
+	modulation = *modulation_ptr;
+	modulation.steps /= 2; // TODO: Cast to unsigned integer?
 	modulation_val = 0;
 }
 
