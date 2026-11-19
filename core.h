@@ -327,7 +327,11 @@ namespace SMPS
 
 			union Shared
 			{
-				Music music_backup;
+				struct MusicBackup
+				{
+					Variables variables;
+					Music tracks;
+				} music_backup;
 				struct OtherTracks
 				{
 					struct
@@ -413,14 +417,14 @@ namespace SMPS
 			);
 		}
 
-		Tracks::Music& GetMusicBackup()
+		Tracks::Shared::MusicBackup& GetMusicBackup()
 		{
 			return VisitShared(
-				[](Tracks::Music &music_backup) -> Tracks::Music&
+				[](Tracks::Shared::MusicBackup &music_backup) -> Tracks::Shared::MusicBackup&
 				{
 					return music_backup;
 				},
-				[](auto&) -> Tracks::Music&
+				[](auto&) -> Tracks::Shared::MusicBackup&
 				{
 					std::unreachable();
 				}
@@ -443,7 +447,6 @@ namespace SMPS
 		}
 
 		Variables variables;
-		Variables variables_backup;
 
 		unsigned char pause;
 	#ifdef SMPS_GloopSFXBehaviour

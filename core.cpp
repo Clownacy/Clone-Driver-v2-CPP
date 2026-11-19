@@ -1765,8 +1765,9 @@ static void Sound_PlayBGM(const unsigned int id)
 
 			state->variables.sndprio = 0;
 
-			state->GetMusicBackup() = state->tracks.music;
-			state->variables_backup = state->variables;
+			auto &music_backup = state->GetMusicBackup();
+			music_backup.tracks = state->tracks.music;
+			music_backup.variables = state->variables;
 		}
 	}
 	else
@@ -2300,30 +2301,34 @@ static void Sound_PlayCommand(const unsigned int id)
 			break;
 
 		case 6: // SpeedUpMusic
-			if (state->variables.playing_1up)
-			{
-				state->variables_backup.main_tempo = state->variables_backup.speeduptempo;
-				state->variables_backup.speedup = true;
-			}
-			else
-			{
-				state->variables.main_tempo = state->variables.speeduptempo;
-				state->variables.speedup = true;
-			}
+			state->VisitShared(
+				[](State::Tracks::Shared::MusicBackup &music_backup)
+				{
+					music_backup.variables.main_tempo = music_backup.variables.speeduptempo;
+					music_backup.variables.speedup = true;
+				},
+				[](auto&)
+				{
+					state->variables.main_tempo = state->variables.speeduptempo;
+					state->variables.speedup = true;
+				}
+			);
 			
 			break;
 
 		case 7: // SlowDownMusic
-			if (state->variables.playing_1up)
-			{
-				state->variables_backup.main_tempo = state->variables_backup.tempo_mod;
-				state->variables_backup.speedup = false;
-			}
-			else
-			{
-				state->variables.main_tempo = state->variables.tempo_mod;
-				state->variables.speedup = false;
-			}
+			state->VisitShared(
+				[](State::Tracks::Shared::MusicBackup &music_backup)
+				{
+					music_backup.variables.main_tempo = music_backup.variables.tempo_mod;
+					music_backup.variables.speedup = false;
+				},
+				[](auto&)
+				{
+					state->variables.main_tempo = state->variables.speeduptempo;
+					state->variables.speedup = false;
+				}
+			);
 			
 			break;
 	}
@@ -2432,8 +2437,9 @@ static void UpdateMusic()
 	if (state->variables.fade_to_previous_pending)
 	{
 		// Restore music backup.
-		state->tracks.music = state->GetMusicBackup();
-		state->variables = state->variables_backup;
+		const auto &music_backup = state->GetMusicBackup();
+		state->tracks.music = music_backup.tracks;
+		state->variables = music_backup.variables;
 		state->variables.playing_1up = false;
 
 		// Begin fade-in.
