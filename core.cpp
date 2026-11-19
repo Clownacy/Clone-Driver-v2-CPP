@@ -626,14 +626,12 @@ bool Track::CoordFlag(const unsigned int flag)
 			Visit(
 				[&psg_noise](PSGTrack &track)
 				{
-					unsigned int value = track.psg_noise;
-					track.voice_control = 0xE0;
+					track.psg_noise = psg_noise;
 
-					if (value == 0)
-					{
-						value = 0xFF;
-						track.voice_control = 0xC0;
-					}
+					const bool exit_noise_mode = psg_noise == 0;
+
+					track.voice_control      = exit_noise_mode ? 0xC0 : 0xE0;
+					const unsigned int value = exit_noise_mode ? 0xFF : track.psg_noise;
 
 					if (!track.IsOverridden())
 						ClownMDSDK::MainCPU::PSG::Write(value);
