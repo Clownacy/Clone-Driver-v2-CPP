@@ -19,6 +19,13 @@
 
 namespace SMPS
 {
+	template<typename... Ts>
+	struct VisitHelper : Ts... { using Ts::operator()...; };
+
+	// Deduction guide.
+	template<typename... Ts>
+	VisitHelper(Ts...) -> VisitHelper<Ts...>;
+
 	inline auto LockZ80BusFMSafe(const auto &callback)
 	{
 		return ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
@@ -147,13 +154,6 @@ namespace SMPS
 		BIT_METHODS(playback_control, 3, ModulationEnabled)
 		BIT_METHODS(playback_control, 5, ModulationInZ80Mode)
 	#endif
-
-		template<typename... Ts>
-		struct VisitHelper : Ts... { using Ts::operator()...; };
-
-		/* Deduction guide. */
-		template<typename... Ts>
-		VisitHelper(Ts...) -> VisitHelper<Ts...>;
 
 		auto VisitInternal(const auto &visitor);
 
@@ -289,9 +289,9 @@ namespace SMPS
 
 	struct State
 	{
-		struct
+		struct Tracks
 		{
-			struct
+			struct Music
 			{
 				DACTrack dac;
 				std::array<FMTrack, 6> fm;
@@ -323,52 +323,116 @@ namespace SMPS
 				}
 
 				// TODO: Add a 'clear' method?
-			} music, music_backup; 
+			} music; 
 
-			struct
+			union Shared
 			{
-				std::array<FMTrack, 3> fm;
-				std::array<PSGTrack, 3> psg;
-
-				FMTrack& FM3()  { return fm[0]; }
-				FMTrack& FM4()  { return fm[1]; }
-				FMTrack& FM5()  { return fm[2]; }
-				PSGTrack& PSG1() { return psg[0]; }
-				PSGTrack& PSG2() { return psg[1]; }
-				PSGTrack& PSG3() { return psg[2]; }
-
-				void Iterate(const auto &callback)
+				Music music_backup;
+				struct OtherTracks
 				{
-					for (auto &track : fm)
-						callback(track);
-					for (auto &track : psg)
-						callback(track);
-				}
-			} sfx;
+					struct
+					{
+						std::array<FMTrack, 3> fm;
+						std::array<PSGTrack, 3> psg;
 
-		#ifdef SMPS_EnableSpecSFX
-			struct
-			{
-				FMTrack fm4;
-				PSGTrack psg3;
+						FMTrack& FM3()  { return fm[0]; }
+						FMTrack& FM4()  { return fm[1]; }
+						FMTrack& FM5()  { return fm[2]; }
+						PSGTrack& PSG1() { return psg[0]; }
+						PSGTrack& PSG2() { return psg[1]; }
+						PSGTrack& PSG3() { return psg[2]; }
 
-				void Iterate(const auto &callback)
+						void Iterate(const auto &callback)
+						{
+							for (auto &track : fm)
+								callback(track);
+							for (auto &track : psg)
+								callback(track);
+						}
+					} sfx;
+
+				#ifdef SMPS_EnableSpecSFX
+					struct
+					{
+						FMTrack fm4;
+						PSGTrack psg3;
+
+						void Iterate(const auto &callback)
+						{
+							callback(fm4);
+							callback(psg3);
+						}
+					} special_sfx;
+				#endif
+				} other_tracks;
+			} shared;
+
+		} tracks;
+
+		template<typename... Ts>
+		decltype(auto) VisitShared(Ts &&...visitors)
+		{
+			auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
+
+			if (variables.playing_1up)
+				return visitor(tracks.shared.music_backup);
+			else
+				return visitor(tracks.shared.other_tracks);
+		}
+
+		void VisitOtherTracks(const auto &callback)
+		{
+			return VisitShared(
+				[&callback](Tracks::Shared::OtherTracks &other_tracks)
 				{
-					callback(fm4);
-					callback(psg3);
-				}
-			} special_sfx;
-		#endif
+					callback(other_tracks);
+				},
+				[](auto&) {}
+			);
+		}
 
-			void Iterate(const auto &callback)
-			{
-				music.Iterate(callback);
-				sfx.Iterate(callback);
-			#ifdef SMPS_EnableSpecSFX
-				special_sfx.Iterate(callback);
-			#endif
-			}
-		} tracks; 
+		Tracks::Shared::OtherTracks& GetOtherTracks()
+		{
+			return VisitShared(
+				[](Tracks::Shared::OtherTracks &other_tracks) -> Tracks::Shared::OtherTracks&
+				{
+					return other_tracks;
+				},
+				[](auto&) -> Tracks::Shared::OtherTracks&
+				{
+					std::unreachable();
+				}
+			);
+		}
+
+		Tracks::Music& GetMusicBackup()
+		{
+			return VisitShared(
+				[](Tracks::Music &music_backup) -> Tracks::Music&
+				{
+					return music_backup;
+				},
+				[](auto&) -> Tracks::Music&
+				{
+					std::unreachable();
+				}
+			);
+		}
+
+		void IterateTracks(const auto &callback)
+		{
+			tracks.music.Iterate(callback);
+
+			VisitOtherTracks(
+				[&callback](auto &other_tracks)
+				{
+					other_tracks.sfx.Iterate(callback);
+				#ifdef SMPS_EnableSpecSFX
+					other_tracks.special_sfx.Iterate(callback);
+				#endif
+				}
+			);
+		}
 
 		Variables variables;
 		Variables variables_backup;

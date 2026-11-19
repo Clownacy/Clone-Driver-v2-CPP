@@ -10,122 +10,134 @@ register State* state asm("a5");
 
 STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, const bool modulation)
 {
-	const auto &TrackMap = [](unsigned int index) -> Track&
+	const auto &TrackMap = [](unsigned int index) -> Track*
 	{
 		if (index == 0)
-			return state->tracks.music.dac;
+			return &state->tracks.music.dac;
 
 		--index;
 
 		if (index == 0)
-			return state->tracks.music.FM1();
+			return &state->tracks.music.FM1();
 
 		--index;
 
 		if (index == 0)
-			return state->tracks.music.FM2();
+			return &state->tracks.music.FM2();
 
 		--index;
 
 		if (index == 0)
-			return state->tracks.music.FM3();
+			return &state->tracks.music.FM3();
 
 		--index;
 
 		if (index == 0)
-			return state->tracks.music.FM4();
+			return &state->tracks.music.FM4();
 
 		--index;
 
 		if (index == 0)
-			return state->tracks.music.FM5();
+			return &state->tracks.music.FM5();
 
 		--index;
 
 		if (index == 0)
-			return state->tracks.music.FM6();
+			return &state->tracks.music.FM6();
 
 		--index;
 
 		if (index == 0)
-			return state->tracks.music.PSG1();
+			return &state->tracks.music.PSG1();
 
 		--index;
 
 		if (index == 0)
-			return state->tracks.music.PSG2();
+			return &state->tracks.music.PSG2();
 
 		--index;
 
 		if (index == 0)
-			return state->tracks.music.PSG3();
+			return &state->tracks.music.PSG3();
 
 	#ifdef SMPS_EnablePSGNoiseDrums
 		--index;
 
 		if (index == 0)
-			return state->tracks.music.psg_noise;
+			return &state->tracks.music.psg_noise;
 	#endif
 
-		--index;
+		return state->VisitShared(
+			[&](State::Tracks::Shared::OtherTracks &other_tracks) -> Track*
+			{
+				--index;
 
-		if (index == 0)
-			return state->tracks.sfx.FM3();
+				if (index == 0)
+					return &other_tracks.sfx.FM3();
 
-		--index;
+				--index;
 
-		if (index == 0)
-			return state->tracks.sfx.FM4();
+				if (index == 0)
+					return &other_tracks.sfx.FM4();
 
-		--index;
+				--index;
 
-		if (index == 0)
-			return state->tracks.sfx.FM4();
+				if (index == 0)
+					return &other_tracks.sfx.FM4();
 
-		--index;
+				--index;
 
-		if (index == 0)
-			return state->tracks.sfx.PSG1();
+				if (index == 0)
+					return &other_tracks.sfx.PSG1();
 
-		--index;
+				--index;
 
-		if (index == 0)
-			return state->tracks.sfx.PSG2();
+				if (index == 0)
+					return &other_tracks.sfx.PSG2();
 
-		--index;
+				--index;
 
-		if (index == 0)
-			return state->tracks.sfx.PSG3();
+				if (index == 0)
+					return &other_tracks.sfx.PSG3();
 
-	#ifdef SMPS_EnableSpecSFX
-		--index;
+			#ifdef SMPS_EnableSpecSFX
+				--index;
 
-		if (index == 0)
-			return state->tracks.special_sfx.fm4;
+				if (index == 0)
+					return &other_tracks.special_sfx.fm4;
 
-		--index;
+				--index;
 
-		if (index == 0)
-			return state->tracks.special_sfx.psg3;
-	#endif
+				if (index == 0)
+					return &other_tracks.special_sfx.psg3;
+			#endif
 
-		std::unreachable();
+				return nullptr;
+			},
+			[](auto &) -> Track*
+			{
+				return nullptr;
+			}
+		);
 	};
 
 	const auto &track = TrackMap(track_id);
 
-	if (!track.IsPlaying())
+	if (track == nullptr)
 		return 0;
 
-	if (track.IsResting())
+	if (!track->IsPlaying())
 		return 0;
 
-	if (track.IsOverridden())
+	if (track->IsResting())
+		return 0;
+
+	if (track->IsOverridden())
 		return 0;
 
 	const unsigned int note = [&]() -> unsigned int
 	{
-		if (&TrackMap(track_id) == &state->tracks.music.dac)
+		if (track == &state->tracks.music.dac)
 		{
 			// DAC
 			const auto z80_sample_address = []()
@@ -144,21 +156,21 @@ STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, c
 			if (z80_sample_address == zMuteSample)
 				return 0;
 
-			return track.freq;
+			return track->freq;
 		}
 		else
 		{
 			// Music/SFX FM/PSG
-			unsigned int note = track.freq + track.detune;
+			unsigned int note = track->freq + track->detune;
 
-			if (modulation && track.IsModulationEnabled())
-				note += track.modulation_val;
+			if (modulation && track->IsModulationEnabled())
+				note += track->modulation_val;
 
 			return note;
 		}
 	}();
 #ifdef SMPS_SoundTest
-	return note | (track.IsSoundTest() ? 0x8000 : 0);
+	return note | (track->IsSoundTest() ? 0x8000 : 0);
 #else
 	return note;
 #endif
