@@ -2435,13 +2435,13 @@ static void UpdateMusic()
 
 		state->variables.fadein_counter = 0x28;
 
-		DACTrack* const dac_track = &state->tracks.music.dac;
-
 		LockZ80BusFMSafe(
 			[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 			{
-				if (dac_track->IsPlaying())
-					dac_track->SetDACVolume(z80_bus);
+				DACTrack &dac_track = state->tracks.music.dac;
+
+				if (dac_track.IsPlaying())
+					dac_track.SetDACVolume(z80_bus);
 
 				for (FMTrack &fm_track : state->tracks.music.fm)
 				{
@@ -2484,13 +2484,13 @@ static void DoFadeIn()
 	--state->variables.fadein_counter;
 	state->variables.fadein_delay = 2;
 
-	DACTrack* const dac_track = &state->tracks.music.dac;
-
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			if (dac_track->IsPlaying())
-				dac_track->SetDACVolume(z80_bus);
+			DACTrack &dac_track = state->tracks.music.dac;
+
+			if (dac_track.IsPlaying())
+				dac_track.SetDACVolume(z80_bus);
 
 			const auto DoFM = [&](FMTrack &track)
 			{
@@ -2547,19 +2547,19 @@ static void DoFadeOut()
 
 	state->variables.fadeout_delay = 3;
 
-	DACTrack* const dac_track = &state->tracks.music.dac;
-
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			if (dac_track->IsPlaying())
-			{
-				dac_track->volume += 4;
+			DACTrack &dac_track = state->tracks.music.dac;
 
-				if (dac_track->volume >= 0x80)
-					dac_track->SetPlaying(false);
+			if (dac_track.IsPlaying())
+			{
+				dac_track.volume += 4;
+
+				if (dac_track.volume >= 0x80)
+					dac_track.SetPlaying(false);
 				else
-					dac_track->SetDACVolume(z80_bus);
+					dac_track.SetDACVolume(z80_bus);
 			}
 
 			for (FMTrack &fm_track : state->tracks.music.fm)
@@ -2598,14 +2598,14 @@ static void DoFadeOut()
 	}
 
 #ifdef SMPS_EnablePSGNoiseDrums
-	auto* const psg_track = &state->tracks.music.psg_noise;
+	PSGTrack &psg_track = state->tracks.music.psg_noise;
 
-	if (psg_track->IsPlaying())
+	if (psg_track.IsPlaying())
 	{
 		state->variables.psg_drum_volume += 4;
 
 		if (state->variables.psg_drum_volume >= 0x80)
-			psg_track->SetPlaying(false);
+			psg_track.SetPlaying(false);
 	}
 #endif
 }
