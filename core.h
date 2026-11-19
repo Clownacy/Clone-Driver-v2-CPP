@@ -364,6 +364,14 @@ namespace SMPS
 						}
 					} special_sfx;
 				#endif
+
+					void Iterate(const auto &callback)
+					{
+						sfx.Iterate(callback);
+					#ifdef SMPS_EnableSpecSFX
+						special_sfx.Iterate(callback);
+					#endif
+					}
 				} other_tracks;
 			} shared;
 

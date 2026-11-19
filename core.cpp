@@ -1763,17 +1763,6 @@ static void Sound_PlayBGM(const unsigned int id)
 		{
 			state->variables.playing_1up = true;
 
-			state->tracks.music.Iterate(
-				[](Track &track)
-				{
-					// Back-up the 'is playing' flag to the 'is overridden' flag.
-					track.SetOverridden(track.IsPlaying());
-
-					// Disable the track, so that nothing updates it whilst it is backed-up.
-					track.SetPlaying(false);
-				}
-			);
-
 			state->variables.sndprio = 0;
 
 			state->GetMusicBackup() = state->tracks.music;
@@ -2442,24 +2431,15 @@ static void UpdateMusic()
 
 	if (state->variables.fade_to_previous_pending)
 	{
+		// Restore music backup.
 		state->tracks.music = state->GetMusicBackup();
 		state->variables = state->variables_backup;
+		state->variables.playing_1up = false;
 
-		state->tracks.music.Iterate(
-			[](Track &track)
-			{
-				// TODO: Don't do this any more!
-				// TODO: Also, blank the SFX after restoring the music tracks!
-				// Back-up the 'is playing' flag to the 'is overridden' flag.
-				track.SetPlaying(track.IsOverridden());
-
-				// Disable the track, so that nothing updates it whilst it is backed-up.
-				track.SetOverridden(false);
-			}
-		);
-
+		// Begin fade-in.
 		state->variables.fadein_counter = 0x28;
 
+		// Mark music tracks as resting and update the sound hardware to suit them.
 		LockZ80BusFMSafe(
 			[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 			{
@@ -2494,7 +2474,13 @@ static void UpdateMusic()
 		state->tracks.music.dac.SetFM6Overridden(true);
 		state->tracks.music.FM6().SetFM6Overridden(true);
 
-		state->variables.playing_1up = false;
+		// Mark the SFX as no longer playing, since their RAM has been trashed by the music backup.
+		state->GetOtherTracks().Iterate(
+			[](Track &track)
+			{
+				track.SetPlaying(false);
+			}
+		);
 	}
 }
 
