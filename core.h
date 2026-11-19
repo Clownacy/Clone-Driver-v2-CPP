@@ -289,97 +289,93 @@ namespace SMPS
 
 	struct State
 	{
-		struct Tracks
+		struct MusicTracks
 		{
-			struct Music
+			DACTrack dac;
+			std::array<FMTrack, 6> fm;
+			std::array<PSGTrack, 3> psg;
+		#ifdef SMPS_EnablePSGNoiseDrums
+			PSGTrack psg_noise;
+		#endif
+
+			FMTrack& FM1()  { return fm[0]; }
+			FMTrack& FM2()  { return fm[1]; }
+			FMTrack& FM3()  { return fm[2]; }
+			FMTrack& FM4()  { return fm[3]; }
+			FMTrack& FM5()  { return fm[4]; }
+			FMTrack& FM6()  { return fm[5]; }
+			PSGTrack& PSG1() { return psg[0]; }
+			PSGTrack& PSG2() { return psg[1]; }
+			PSGTrack& PSG3() { return psg[2]; }
+
+			void Iterate(const auto &callback)
 			{
-				DACTrack dac;
-				std::array<FMTrack, 6> fm;
-				std::array<PSGTrack, 3> psg;
+				callback(dac);
+				for (auto &track : fm)
+					callback(track);
+				for (auto &track : psg)
+					callback(track);
 			#ifdef SMPS_EnablePSGNoiseDrums
-				PSGTrack psg_noise;
+				callback(psg_noise);
 			#endif
+			}
 
-				FMTrack& FM1()  { return fm[0]; }
-				FMTrack& FM2()  { return fm[1]; }
-				FMTrack& FM3()  { return fm[2]; }
-				FMTrack& FM4()  { return fm[3]; }
-				FMTrack& FM5()  { return fm[4]; }
-				FMTrack& FM6()  { return fm[5]; }
-				PSGTrack& PSG1() { return psg[0]; }
-				PSGTrack& PSG2() { return psg[1]; }
-				PSGTrack& PSG3() { return psg[2]; }
+			// TODO: Add a 'clear' method?
+		} music_tracks;
 
-				void Iterate(const auto &callback)
-				{
-					callback(dac);
-					for (auto &track : fm)
-						callback(track);
-					for (auto &track : psg)
-						callback(track);
-				#ifdef SMPS_EnablePSGNoiseDrums
-					callback(psg_noise);
-				#endif
-				}
-
-				// TODO: Add a 'clear' method?
-			} music; 
-
-			union Shared
+		union Shared
+		{
+			struct MusicBackup
 			{
-				struct MusicBackup
+				Variables variables;
+				MusicTracks tracks;
+			} music_backup;
+			struct OtherTracks
+			{
+				struct
 				{
-					Variables variables;
-					Music tracks;
-				} music_backup;
-				struct OtherTracks
-				{
-					struct
-					{
-						std::array<FMTrack, 3> fm;
-						std::array<PSGTrack, 3> psg;
+					std::array<FMTrack, 3> fm;
+					std::array<PSGTrack, 3> psg;
 
-						FMTrack& FM3()  { return fm[0]; }
-						FMTrack& FM4()  { return fm[1]; }
-						FMTrack& FM5()  { return fm[2]; }
-						PSGTrack& PSG1() { return psg[0]; }
-						PSGTrack& PSG2() { return psg[1]; }
-						PSGTrack& PSG3() { return psg[2]; }
-
-						void Iterate(const auto &callback)
-						{
-							for (auto &track : fm)
-								callback(track);
-							for (auto &track : psg)
-								callback(track);
-						}
-					} sfx;
-
-				#ifdef SMPS_EnableSpecSFX
-					struct
-					{
-						FMTrack fm4;
-						PSGTrack psg3;
-
-						void Iterate(const auto &callback)
-						{
-							callback(fm4);
-							callback(psg3);
-						}
-					} special_sfx;
-				#endif
+					FMTrack& FM3()  { return fm[0]; }
+					FMTrack& FM4()  { return fm[1]; }
+					FMTrack& FM5()  { return fm[2]; }
+					PSGTrack& PSG1() { return psg[0]; }
+					PSGTrack& PSG2() { return psg[1]; }
+					PSGTrack& PSG3() { return psg[2]; }
 
 					void Iterate(const auto &callback)
 					{
-						sfx.Iterate(callback);
-					#ifdef SMPS_EnableSpecSFX
-						special_sfx.Iterate(callback);
-					#endif
+						for (auto &track : fm)
+							callback(track);
+						for (auto &track : psg)
+							callback(track);
 					}
-				} other_tracks;
-			} shared;
+				} sfx;
 
-		} tracks;
+			#ifdef SMPS_EnableSpecSFX
+				struct
+				{
+					FMTrack fm4;
+					PSGTrack psg3;
+
+					void Iterate(const auto &callback)
+					{
+						callback(fm4);
+						callback(psg3);
+					}
+				} special_sfx;
+			#endif
+
+				void Iterate(const auto &callback)
+				{
+					sfx.Iterate(callback);
+				#ifdef SMPS_EnableSpecSFX
+					special_sfx.Iterate(callback);
+				#endif
+				}
+			} other_tracks;
+		} shared;
 
 		template<typename... Ts>
 		decltype(auto) VisitShared(Ts &&...visitors)
@@ -387,15 +383,15 @@ namespace SMPS
 			auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
 
 			if (variables.playing_1up)
-				return visitor(tracks.shared.music_backup);
+				return visitor(shared.music_backup);
 			else
-				return visitor(tracks.shared.other_tracks);
+				return visitor(shared.other_tracks);
 		}
 
 		void VisitOtherTracks(const auto &callback)
 		{
 			return VisitShared(
-				[&callback](Tracks::Shared::OtherTracks &other_tracks)
+				[&callback](Shared::OtherTracks &other_tracks)
 				{
 					callback(other_tracks);
 				},
@@ -403,28 +399,28 @@ namespace SMPS
 			);
 		}
 
-		Tracks::Shared::OtherTracks& GetOtherTracks()
+		Shared::OtherTracks& GetOtherTracks()
 		{
 			return VisitShared(
-				[](Tracks::Shared::OtherTracks &other_tracks) -> Tracks::Shared::OtherTracks&
+				[](Shared::OtherTracks &other_tracks) -> Shared::OtherTracks&
 				{
 					return other_tracks;
 				},
-				[](auto&) -> Tracks::Shared::OtherTracks&
+				[](auto&) -> Shared::OtherTracks&
 				{
 					std::unreachable();
 				}
 			);
 		}
 
-		Tracks::Shared::MusicBackup& GetMusicBackup()
+		Shared::MusicBackup& GetMusicBackup()
 		{
 			return VisitShared(
-				[](Tracks::Shared::MusicBackup &music_backup) -> Tracks::Shared::MusicBackup&
+				[](Shared::MusicBackup &music_backup) -> Shared::MusicBackup&
 				{
 					return music_backup;
 				},
-				[](auto&) -> Tracks::Shared::MusicBackup&
+				[](auto&) -> Shared::MusicBackup&
 				{
 					std::unreachable();
 				}
@@ -433,7 +429,7 @@ namespace SMPS
 
 		void IterateTracks(const auto &callback)
 		{
-			tracks.music.Iterate(callback);
+			music_tracks.Iterate(callback);
 
 			VisitOtherTracks(
 				[&callback](auto &other_tracks)
