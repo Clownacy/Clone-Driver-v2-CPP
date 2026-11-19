@@ -77,7 +77,7 @@ namespace SMPS
 		unsigned char voice_control;
 		unsigned char tempo_divider; // TODO: Move this to global variables for music tracks.
 		signed char transpose;
-		unsigned char volume;
+		unsigned char volume_attenuation;
 		unsigned char voice_index;
 		const unsigned char *data_pointer;
 
@@ -176,7 +176,7 @@ namespace SMPS
 		void DACUpdateSample();
 		[[nodiscard]] bool DACDoNext();
 		void DACUpdateTrack();
-		void SetDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void ApplyDACVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 	};
 
 	struct FMTrack : YM2612Track
@@ -211,7 +211,7 @@ namespace SMPS
 		void PSGSetFreq(unsigned char note);
 		[[nodiscard]] bool PSGUpdateVolFX();
 		[[nodiscard]] bool PSGDoVolFX();
-		void SetPSGVolume(unsigned int psg_volume);
+		void SetPSGVolumeAttenuation(unsigned int psg_volume);
 		void SendPSGNoteOff();
 		void PSGNoteOff();
 
@@ -570,7 +570,7 @@ namespace SMPS
 	struct PSGNoiseDrum
 	{
 		unsigned char volume_envelope;
-		unsigned char volume;
+		unsigned char volume_attenuation;
 		unsigned char noise_mode;
 	};
 #endif

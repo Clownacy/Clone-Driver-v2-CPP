@@ -234,6 +234,23 @@ static void SendDACSampleRequest(ClownMDSDK::MainCPU::Z80::Bus &bus, const unsig
 #endif
 }
 
+static void WriteDACVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigned int channel, const unsigned int volume_attenuation)
+{
+#ifdef __MEGA_DRIVE__
+	z80_bus.RAM(channel != 0 ? zSample2Volume : zSample1Volume) = volume_attenuation | zSampleLookup >> 8;
+#endif
+}
+
+static void WriteDACVolumeAttenuation(const unsigned int channel, const unsigned int volume_attenuation)
+{
+	ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
+		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+		{
+			WriteDACVolumeAttenuation(z80_bus, channel, volume_attenuation);
+		}
+	);
+}
+
 static void PlayDACSFX(const unsigned int dac_channel, const unsigned int dac_index)
 {
 	state->music_tracks.dac.SetFM6Overridden(true);
@@ -252,27 +269,8 @@ static void PlayDACSFX(const unsigned int dac_channel, const unsigned int dac_in
 
 			SendDACSampleRequest(z80_bus, dac_channel, sample);
 
-		#ifdef __MEGA_DRIVE__
 			// This is a DAC SFX: set to full volume
-			z80_bus.RAM(dac_channel != 0 ? zSample2Volume : zSample1Volume) = zSampleLookup >> 8;
-		#endif
-		}
-	);
-}
-
-static void WriteDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigned int volume)
-{
-#ifdef __MEGA_DRIVE__
-	z80_bus.RAM(zSample1Volume) = volume | zSampleLookup >> 8;
-#endif
-}
-
-static void WriteDACVolume(const unsigned int volume)
-{
-	ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
-		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
-		{
-			WriteDACVolume(z80_bus, volume);
+			WriteDACVolumeAttenuation(z80_bus, dac_channel, 0);
 		}
 	);
 }
@@ -401,23 +399,23 @@ bool Track::CoordFlag(const unsigned int flag)
 #ifdef SMPS_EnablePWM
 				[&value](PWMTrack &track)
 				{
-					track.volume += value;
+					track.volume_attenuation += value;
 				},
 #endif
 				[&value](DACTrack &track)
 				{
-					track.volume += value;
+					track.volume_attenuation += value;
 
 					ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
-							track.SetDACVolume(z80_bus);
+							track.ApplyDACVolumeAttenuation(z80_bus);
 						}
 					);
 				},
 				[&value](FMTrack &track)
 				{
-					track.volume += value;
+					track.volume_attenuation += value;
 
 					LockZ80BusFMSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -488,7 +486,7 @@ bool Track::CoordFlag(const unsigned int flag)
 		}
 
 		case 0xC: // cfChangePSGVolume
-			volume += *data_pointer++;
+			volume_attenuation += *data_pointer++;
 			break;
 
 		case 0xD: // cfSetVoice
@@ -723,18 +721,18 @@ bool Track::CoordFlag(const unsigned int flag)
 			Visit(
 				[&value](DACTrack &track)
 				{
-					track.volume = value & 0x7F;
+					track.volume_attenuation = value & 0x7F;
 
 					LockZ80BusFMSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
-							track.SetDACVolume(z80_bus);
+							track.ApplyDACVolumeAttenuation(z80_bus);
 						}
 					);
 				},
 				[&value](FMTrack &track)
 				{
-					track.volume = value & 0x7F;
+					track.volume_attenuation = value & 0x7F;
 
 					LockZ80BusFMSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
@@ -745,7 +743,7 @@ bool Track::CoordFlag(const unsigned int flag)
 				},
 				[&value](PSGTrack &track)
 				{
-					track.volume = value & 0x78;
+					track.volume_attenuation = value & 0x78;
 				}
 			);
 
@@ -1111,9 +1109,9 @@ void DACTrack::DACUpdateTrack()
 	DACUpdateSample();
 }
 
-void DACTrack::SetDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+void DACTrack::ApplyDACVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 {
-	WriteDACVolume(z80_bus, std::min(0x7F, state->variables.fadein_counter * 4 + volume) / 8);
+	WriteDACVolumeAttenuation(z80_bus, 0, std::min(0x7F, state->variables.fadein_counter * 4 + volume_attenuation) / 8);
 }
 
 ////////
@@ -1122,7 +1120,7 @@ void DACTrack::SetDACVolume(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 
 void FMTrack::SendVoiceTLCommon(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const Voice &voice, const bool force_upload)
 {
-	const unsigned int base_volume = std::min(0x7FU, volume + static_cast<unsigned int>(state->variables.fadein_counter) * 2);
+	const unsigned int base_volume = std::min(0x7FU, volume_attenuation + static_cast<unsigned int>(state->variables.fadein_counter) * 2);
 
 	for (unsigned int i = 0; i < 4; ++i)
 	{
@@ -1537,7 +1535,7 @@ bool PSGTrack::PSGUpdateVolFX()
 
 bool PSGTrack::PSGDoVolFX()
 {
-	unsigned int psg_volume = volume;
+	unsigned int psg_volume_attenuation = volume_attenuation;
 
 	if (voice_index != 0)
 	{
@@ -1567,17 +1565,17 @@ bool PSGTrack::PSGDoVolFX()
 					return false;
 			}
 
-			psg_volume += value << 3;
-			psg_volume = std::min(0xFU << 3, psg_volume);
+			psg_volume_attenuation += value << 3;
+			psg_volume_attenuation = std::min(0xFU << 3, psg_volume_attenuation);
 			break;
 		}
 	}
 
-	SetPSGVolume(psg_volume);
+	SetPSGVolumeAttenuation(psg_volume_attenuation);
 	return true;
 }
 
-void PSGTrack::SetPSGVolume(const unsigned int psg_volume)
+void PSGTrack::SetPSGVolumeAttenuation(const unsigned int psg_volume_attenuation)
 {
 	if (IsResting() || IsOverridden())
 		return;
@@ -1585,7 +1583,7 @@ void PSGTrack::SetPSGVolume(const unsigned int psg_volume)
 	if (IsHeld() && note_timeout_master != 0 && note_timeout == 0)
 		return;
 
-	ClownMDSDK::MainCPU::PSG::Write(0x10 | voice_control | std::min(0xFU, (psg_volume + state->variables.fadein_counter * 4) >> 3));
+	ClownMDSDK::MainCPU::PSG::Write(0x10 | voice_control | std::min(0xFU, (psg_volume_attenuation + state->variables.fadein_counter * 4) >> 3));
 }
 
 void PSGTrack::SendPSGNoteOff()
@@ -1624,7 +1622,7 @@ void PSGTrack::PSGNoiseSetDrumNote(const unsigned char note)
 #endif
 
 	voice_index = drum.volume_envelope;
-	volume = state->variables.psg_drum_volume + (drum.volume << 3);
+	volume_attenuation = state->variables.psg_drum_volume + (drum.volume_attenuation << 3);
 
 	if (IsOverridden())
 		return;
@@ -1719,7 +1717,7 @@ static void InitMusicPlayback()
 	);
 
 	// Reset DAC volume.
-	WriteDACVolume(0);
+	WriteDACVolumeAttenuation(0, 0);
 
 	// InitMusicPlayback, and Sound_PlayBGM for that matter,
 	// don't do a very good job of setting up the music tracks.
@@ -1813,7 +1811,7 @@ static void Sound_PlayBGM(const unsigned int id)
 		track.duration_timeout = 1;
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
 		track.transpose = track_header[2];
-		track.volume = track_header[3];
+		track.volume_attenuation = track_header[3];
 
 		track_header += 4;
 	};
@@ -1845,7 +1843,7 @@ static void Sound_PlayBGM(const unsigned int id)
 		track.duration_timeout = 1;
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
 		track.transpose = track_header[2];
-		track.volume = track_header[3];
+		track.volume_attenuation = track_header[3];
 #ifdef SMPS_EnableModulationEnvelopes
 		track.modulation_ctrl = track_header[4];
 #endif
@@ -1865,7 +1863,7 @@ static void Sound_PlayBGM(const unsigned int id)
 		track.duration_timeout = 1;
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
 		track.transpose = track_header[2];
-		track.volume = track_header[3];
+		track.volume_attenuation = track_header[3];
 
 		track_header += 4;
 	}
@@ -2020,7 +2018,7 @@ static void Sound_PlaySFX(const unsigned int id)
 		track.tempo_divider = tempo_divider;
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[2])];
 		track.transpose = track_header[4];
-		track.volume = track_header[5];
+		track.volume_attenuation = track_header[5];
 		track.duration_timeout = 1;
 
 #ifdef SMPS_EnableSpinDashSFX
@@ -2100,7 +2098,7 @@ static void Sound_PlaySpecial(const unsigned int id)
 		track.tempo_divider = tempo_divider;
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[2])];
 		track.transpose = track_header[4];
-		track.volume = track_header[5];
+		track.volume_attenuation = track_header[5];
 		track.duration_timeout = 1;
 		track.stack_pointer = track.go_sub_stack.size();
 
@@ -2445,7 +2443,7 @@ static void UpdateMusic()
 				DACTrack &dac_track = state->music_tracks.dac;
 
 				if (dac_track.IsPlaying())
-					dac_track.SetDACVolume(z80_bus);
+					dac_track.ApplyDACVolumeAttenuation(z80_bus);
 
 				for (FMTrack &fm_track : state->music_tracks.fm)
 				{
@@ -2492,7 +2490,7 @@ static void DoFadeIn()
 			DACTrack &dac_track = state->music_tracks.dac;
 
 			if (dac_track.IsPlaying())
-				dac_track.SetDACVolume(z80_bus);
+				dac_track.ApplyDACVolumeAttenuation(z80_bus);
 
 			const auto DoFM = [&](FMTrack &track)
 			{
@@ -2523,7 +2521,7 @@ static void DoFadeIn()
 			// If a volume envelope is active, then it will handle updating the volume for us.
 			// Doing it manually will just conflict with it.
 			if (track.voice_index == 0)
-				track.SetPSGVolume(track.volume);
+				track.SetPSGVolumeAttenuation(track.volume_attenuation);
 		}
 	};
 
@@ -2568,21 +2566,21 @@ static void DoFadeOut()
 
 			if (dac_track.IsPlaying())
 			{
-				dac_track.volume += 4;
+				dac_track.volume_attenuation += 4;
 
-				if (dac_track.volume >= 0x80)
+				if (dac_track.volume_attenuation >= 0x80)
 					dac_track.SetPlaying(false);
 				else
-					dac_track.SetDACVolume(z80_bus);
+					dac_track.ApplyDACVolumeAttenuation(z80_bus);
 			}
 
 			for (FMTrack &fm_track : state->music_tracks.fm)
 			{
 				if (fm_track.IsPlaying())
 				{
-					++fm_track.volume;
+					++fm_track.volume_attenuation;
 
-					if (fm_track.volume >= 0x80)
+					if (fm_track.volume_attenuation >= 0x80)
 						fm_track.SetPlaying(false);
 					else
 						fm_track.SendVoiceTL(z80_bus);
@@ -2595,9 +2593,9 @@ static void DoFadeOut()
 	{
 		if (psg_track.IsPlaying())
 		{
-			psg_track.volume += 4;
+			psg_track.volume_attenuation += 4;
 
-			if (psg_track.volume >= 0x80)
+			if (psg_track.volume_attenuation >= 0x80)
 			{
 				psg_track.SetPlaying(false);
 			}
@@ -2606,7 +2604,7 @@ static void DoFadeOut()
 				// If a volume envelope is active, then it will handle updating the volume for us.
 				// Doing it manually will just conflict with it.
 				if (psg_track.voice_index == 0)
-					psg_track.SetPSGVolume(psg_track.volume);
+					psg_track.SetPSGVolumeAttenuation(psg_track.volume_attenuation);
 			}
 		}
 	}
