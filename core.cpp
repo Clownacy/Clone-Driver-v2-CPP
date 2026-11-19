@@ -615,19 +615,25 @@ bool Track::CoordFlag(const unsigned int flag)
 
 		case 0x11: // cfSetPSGNoise
 		{
-			psg_noise = *data_pointer++;
+			const auto psg_noise = *data_pointer++;
 
-			unsigned int value = psg_noise;
-			voice_control = 0xE0;
+			Visit(
+				[&psg_noise](PSGTrack &track)
+				{
+					unsigned int value = track.psg_noise;
+					track.voice_control = 0xE0;
 
-			if (value == 0)
-			{
-				value = 0xFF;
-				voice_control = 0xC0;
-			}
+					if (value == 0)
+					{
+						value = 0xFF;
+						track.voice_control = 0xC0;
+					}
 
-			if (!IsOverridden())
-				ClownMDSDK::MainCPU::PSG::Write(value);
+					if (!track.IsOverridden())
+						ClownMDSDK::MainCPU::PSG::Write(value);
+				},
+				[](auto&) {}
+			);
 
 			break;
 		}

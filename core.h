@@ -88,7 +88,6 @@ namespace SMPS
 		unsigned char mod_env_sens;
 	#endif
 		signed char detune;
-		unsigned char psg_noise;
 
 		union
 		{
@@ -195,6 +194,7 @@ namespace SMPS
 	struct PSGTrack : Track
 	{
 		unsigned char vol_env_index;
+		unsigned char psg_noise;
 
 		// PSG
 		void PSGUpdateTrack();
