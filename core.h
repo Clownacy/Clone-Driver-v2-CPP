@@ -97,9 +97,6 @@ namespace SMPS
 			std::array<const unsigned char*, 3> go_sub_stack;
 		};
 
-		// Generic (TODO: Combine this with the following).
-		void DoModulation();
-
 		// Generic
 		void WriteFMIorII(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, unsigned char port, unsigned char value);
 		void cfJumpTo();
@@ -110,6 +107,7 @@ namespace SMPS
 		[[nodiscard]] std::optional<unsigned int> DoModulationEnvelope();
 		[[nodiscard]] bool IsMusic() const;
 		void ReloadModulationData();
+		void DoModulation();
 		[[nodiscard]] std::optional<unsigned char> GetNoteOrDuration();
 
 	#define BIT_METHOD_IS(VARIABLE, BIT, NAME) [[nodiscard]] bool Is##NAME() const {return ((VARIABLE) & 1 << (BIT)) != 0;}

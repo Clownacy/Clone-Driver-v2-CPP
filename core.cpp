@@ -952,6 +952,57 @@ void Track::ReloadModulationData()
 	modulation_val = 0;
 }
 
+void Track::DoModulation()
+{
+	if (!IsModulationEnabled())
+		return;
+
+	if (!IsModulationInZ80Mode())
+	{
+		// SMPS 68k modulation.
+		if (modulation.wait != 0)
+		{
+			--modulation.wait;
+			return;
+		}
+
+		if (--modulation.speed != 0)
+			return;
+
+		modulation.speed = modulation_ptr->speed;
+
+		if (modulation.steps == 0)
+		{
+			modulation.steps = modulation_ptr->steps;
+			modulation.delta = -modulation.delta;
+			return;
+		}
+
+		--modulation.steps;
+		modulation_val += modulation.delta;
+	}
+	else
+	{
+		// SMPS Z80 modulation.
+		if (--modulation.wait != 0)
+			return;
+
+		++modulation.wait;
+
+		if (--modulation.speed == 0)
+		{
+			modulation.speed = modulation_ptr->speed;
+			modulation_val += modulation.delta;
+		}
+
+		if (--modulation.steps != 0)
+			return;
+
+		modulation.steps = modulation_ptr->steps;
+		modulation.delta = -modulation.delta;
+	}
+}
+
 std::optional<unsigned char> Track::GetNoteOrDuration()
 {
 	unsigned char value;
@@ -1167,57 +1218,6 @@ void FMTrack::FMUpdateTrack()
 
 		if (!FMUpdateFreq())
 			return;
-	}
-}
-
-void Track::DoModulation()
-{
-	if (!IsModulationEnabled())
-		return;
-
-	if (!IsModulationInZ80Mode())
-	{
-		// SMPS 68k modulation.
-		if (modulation.wait != 0)
-		{
-			--modulation.wait;
-			return;
-		}
-
-		if (--modulation.speed != 0)
-			return;
-
-		modulation.speed = modulation_ptr->speed;
-
-		if (modulation.steps == 0)
-		{
-			modulation.steps = modulation_ptr->steps;
-			modulation.delta = -modulation.delta;
-			return;
-		}
-
-		--modulation.steps;
-		modulation_val += modulation.delta;
-	}
-	else
-	{
-		// SMPS Z80 modulation.
-		if (--modulation.wait != 0)
-			return;
-
-		++modulation.wait;
-
-		if (--modulation.speed == 0)
-		{
-			modulation.speed = modulation_ptr->speed;
-			modulation_val += modulation.delta;
-		}
-
-		if (--modulation.steps != 0)
-			return;
-
-		modulation.steps = modulation_ptr->steps;
-		modulation.delta = -modulation.delta;
 	}
 }
 
