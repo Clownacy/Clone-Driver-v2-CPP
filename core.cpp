@@ -2409,7 +2409,7 @@ static void UpdateMusic()
 		if (track.IsPlaying())
 			track.PSGUpdateTrack();
 #ifdef SMPS_EnablePSGNoiseDrums
-	if (state.tracks.music.psg_noise.IsPlaying())
+	if (state->tracks.music.psg_noise.IsPlaying())
 		state->tracks.music.psg_noise.PSGNoiseUpdateTrack();
 #endif
 	TempoWait();
