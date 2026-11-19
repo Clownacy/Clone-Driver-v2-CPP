@@ -1815,9 +1815,14 @@ static void Sound_PlayBGM(const unsigned int id)
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
 		track.transpose = track_header[2];
 		track.volume = track_header[3];
-		track.voice_ptr = voices;
 
 		track_header += 4;
+	};
+
+	const auto &DoFM = [&](FMTrack &track)
+	{
+		DoDACOrFM(track);
+		track.voice_ptr = voices;
 	};
 
 	for (unsigned int i = 0; i < total_dac_and_fm_tracks; ++i)
@@ -1825,7 +1830,7 @@ static void Sound_PlayBGM(const unsigned int id)
 		if (i == 0)
 			DoDACOrFM(state->tracks.music.dac);
 		else
-			DoDACOrFM(state->tracks.music.fm[i - 1]);
+			DoFM(state->tracks.music.fm[i - 1]);
 	}
 
 	state->tracks.music.dac.SetFM6Overridden(true);
@@ -2022,10 +2027,14 @@ static void Sound_PlaySFX(const unsigned int id)
 		track.stack_pointer = track.go_sub_stack.size();
 
 		track.Visit(
-			[&voices](YM2612Track &ym2612_track)
+			[](DACTrack &dac_track)
 			{
-				ym2612_track.ams_fms_pan = 0xC0;
-				ym2612_track.voice_ptr = voices;
+				dac_track.ams_fms_pan = 0xC0;
+			},
+			[&voices](FMTrack &fm_track)
+			{
+				fm_track.ams_fms_pan = 0xC0;
+				fm_track.voice_ptr = voices;
 			},
 			[](auto&) {}
 		);
@@ -2088,10 +2097,14 @@ static void Sound_PlaySpecial(const unsigned int id)
 		track.stack_pointer = track.go_sub_stack.size();
 
 		track.Visit(
-			[&voices](YM2612Track &ym2612_track)
+			[&voices](DACTrack &dac_track)
 			{
-				ym2612_track.ams_fms_pan = 0xC0;
-				ym2612_track.voice_ptr = voices;
+				dac_track.ams_fms_pan = 0xC0;
+			},
+			[&voices](FMTrack &fm_track)
+			{
+				fm_track.ams_fms_pan = 0xC0;
+				fm_track.voice_ptr = voices;
 			},
 			[](auto&) {}
 		);

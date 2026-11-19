@@ -89,7 +89,6 @@ namespace SMPS
 	#endif
 		signed char detune;
 		unsigned char psg_noise;
-		const Voice *voice_ptr;
 
 		union
 		{
@@ -176,6 +175,8 @@ namespace SMPS
 
 	struct FMTrack : YM2612Track
 	{
+		const Voice *voice_ptr;
+
 		void SendVoiceTLCommon(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const Voice &voice, bool force_upload);
 		void SendVoiceTL(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 		void SetVoice(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
