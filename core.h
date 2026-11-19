@@ -155,13 +155,8 @@ namespace SMPS
 		BIT_METHODS(playback_control, 5, ModulationInZ80Mode)
 	#endif
 
-		auto VisitInternal(const auto &visitor);
-
 		template<typename... Ts>
-		auto Visit(Ts &&...visitors)
-		{
-			return VisitInternal(VisitHelper{std::forward<Ts>(visitors)...});
-		}
+		auto Visit(Ts &&...visitors);
 	};
 
 	struct YM2612Track : Track
@@ -228,8 +223,11 @@ namespace SMPS
 	{};
 #endif
 
-	inline auto Track::VisitInternal(const auto &visitor)
+	template<typename... Ts>
+	inline auto Track::Visit(Ts &&...visitors)
 	{
+		auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
+
 		if (IsDAC())
 			return visitor(static_cast<DACTrack&>(*this));
 		else if (IsPSG())
