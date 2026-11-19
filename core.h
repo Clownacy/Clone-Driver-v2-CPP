@@ -330,7 +330,7 @@ namespace SMPS
 				Variables variables;
 				MusicTracks tracks;
 			} music_backup;
-			struct OtherTracks
+			struct NonMusicTracks
 			{
 				struct
 				{
@@ -374,7 +374,7 @@ namespace SMPS
 					special_sfx.Iterate(callback);
 				#endif
 				}
-			} other_tracks;
+			} non_music_tracks;
 		} shared;
 
 		template<typename... Ts>
@@ -385,28 +385,28 @@ namespace SMPS
 			if (variables.playing_1up)
 				return visitor(shared.music_backup);
 			else
-				return visitor(shared.other_tracks);
+				return visitor(shared.non_music_tracks);
 		}
 
-		void VisitOtherTracks(const auto &callback)
+		void VisitNonMusicTracks(const auto &callback)
 		{
 			return VisitShared(
-				[&callback](Shared::OtherTracks &other_tracks)
+				[&callback](Shared::NonMusicTracks &non_music_tracks)
 				{
-					callback(other_tracks);
+					callback(non_music_tracks);
 				},
 				[](auto&) {}
 			);
 		}
 
-		Shared::OtherTracks& GetOtherTracks()
+		Shared::NonMusicTracks& GetNonMusicTracks()
 		{
 			return VisitShared(
-				[](Shared::OtherTracks &other_tracks) -> Shared::OtherTracks&
+				[](Shared::NonMusicTracks &non_music_tracks) -> Shared::NonMusicTracks&
 				{
-					return other_tracks;
+					return non_music_tracks;
 				},
-				[](auto&) -> Shared::OtherTracks&
+				[](auto&) -> Shared::NonMusicTracks&
 				{
 					std::unreachable();
 				}
@@ -431,12 +431,12 @@ namespace SMPS
 		{
 			music_tracks.Iterate(callback);
 
-			VisitOtherTracks(
-				[&callback](auto &other_tracks)
+			VisitNonMusicTracks(
+				[&callback](auto &non_music_tracks)
 				{
-					other_tracks.sfx.Iterate(callback);
+					non_music_tracks.sfx.Iterate(callback);
 				#ifdef SMPS_EnableSpecSFX
-					other_tracks.special_sfx.Iterate(callback);
+					non_music_tracks.special_sfx.Iterate(callback);
 				#endif
 				}
 			);

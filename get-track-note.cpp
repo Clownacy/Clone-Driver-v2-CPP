@@ -68,7 +68,7 @@ STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, c
 	#endif
 
 		return state->VisitShared(
-			[&](State::Shared::OtherTracks &other_tracks) -> Track*
+			[&](State::Shared::NonMusicTracks &other_tracks) -> Track*
 			{
 				--index;
 

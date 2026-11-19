@@ -98,7 +98,7 @@ static Track& SFX_BGMChannelRAM(const unsigned int index)
 
 static Track& SFX_SFXChannelRAM(const unsigned int index)
 {
-	State::Shared::OtherTracks &other_tracks = state->GetOtherTracks();
+	State::Shared::NonMusicTracks &non_music_tracks = state->GetNonMusicTracks();
 
 	switch (index)
 	{
@@ -106,28 +106,28 @@ static Track& SFX_SFXChannelRAM(const unsigned int index)
 			std::unreachable();
 
 		case 0:
-			return other_tracks.sfx.FM3();
+			return non_music_tracks.sfx.FM3();
 
 		case 1:
 			std::unreachable(); // Padding.
 
 		case 2:
-			return other_tracks.sfx.FM4();
+			return non_music_tracks.sfx.FM4();
 
 		case 3:
-			return other_tracks.sfx.FM5();
+			return non_music_tracks.sfx.FM5();
 
 		case 4:
-			return other_tracks.sfx.PSG1();
+			return non_music_tracks.sfx.PSG1();
 
 		case 5:
-			return other_tracks.sfx.PSG2();
+			return non_music_tracks.sfx.PSG2();
 
 		case 6:
-			return other_tracks.sfx.PSG3(); // Plain PSG3
+			return non_music_tracks.sfx.PSG3(); // Plain PSG3
 
 		case 7:
-			return other_tracks.sfx.PSG3(); // Noise
+			return non_music_tracks.sfx.PSG3(); // Noise
 	}
 }
 
@@ -444,7 +444,7 @@ bool Track::CoordFlag(const unsigned int flag)
 						{
 							track.FMNoteOff(z80_bus);
 
-							if (state->GetOtherTracks().sfx.FM4().IsPlaying())
+							if (state->GetNonMusicTracks().sfx.FM4().IsPlaying())
 								return;
 
 							FMTrack &music_fm4 = state->music_tracks.FM4();
@@ -559,16 +559,16 @@ bool Track::CoordFlag(const unsigned int flag)
 			if (IsMusic())
 				return false;
 
-			State::Shared::OtherTracks &other_tracks = state->GetOtherTracks();
+			State::Shared::NonMusicTracks &non_music_tracks = state->GetNonMusicTracks();
 
 			state->variables.sndprio = 0;
 
 			Visit(
-				[&other_tracks](FMTrack &track)
+				[&non_music_tracks](FMTrack &track)
 				{
 					FMTrack *other_track;
 				#ifdef SMPS_EnableSpecSFX
-					auto &special_fm4 = other_tracks.special_sfx.fm4;
+					auto &special_fm4 = non_music_tracks.special_sfx.fm4;
 
 					if (track.voice_control == 4 && special_fm4.IsPlaying())
 					{
@@ -594,11 +594,11 @@ bool Track::CoordFlag(const unsigned int flag)
 						}
 					);
 				},
-				[&other_tracks](PSGTrack &track)
+				[&non_music_tracks](PSGTrack &track)
 				{
 					PSGTrack *other_track;
 				#ifdef SMPS_EnableSpecSFX
-					auto &special_psg3 = other_tracks.special_sfx.psg3;
+					auto &special_psg3 = non_music_tracks.special_sfx.psg3;
 
 					if ((track.voice_control == 0xC0 || track.voice_control == 0xE0) && special_psg3.IsPlaying())
 						other_track = &special_psg3;
@@ -1878,10 +1878,10 @@ static void Sound_PlayBGM(const unsigned int id)
 	}
 #endif
 
-	state->VisitOtherTracks(
-		[](auto &other_tracks)
+	state->VisitNonMusicTracks(
+		[](auto &non_music_tracks)
 		{
-			other_tracks.sfx.Iterate(
+			non_music_tracks.sfx.Iterate(
 				[](Track &track)
 				{
 					if (track.IsPlaying())
@@ -1890,10 +1890,10 @@ static void Sound_PlayBGM(const unsigned int id)
 			);
 
 		#ifdef SMPS_EnableSpecSFX
-			if (other_tracks.special_sfx.fm4.IsPlaying())
+			if (non_music_tracks.special_sfx.fm4.IsPlaying())
 				state->music_tracks.FM4().SetOverridden(true);
 
-			if (other_tracks.special_sfx.psg3.IsPlaying())
+			if (non_music_tracks.special_sfx.psg3.IsPlaying())
 				state->music_tracks.PSG3().SetOverridden(true);
 		#endif
 		}
@@ -2054,13 +2054,13 @@ static void Sound_PlaySFX(const unsigned int id)
 	}
 
 #ifdef SMPS_EnableSpecSFX
-	State::Shared::OtherTracks &other_tracks = state->GetOtherTracks();
+	State::Shared::NonMusicTracks &non_music_tracks = state->GetNonMusicTracks();
 
-	if (other_tracks.sfx.FM4().IsPlaying())
-		other_tracks.special_sfx.fm4.SetOverridden(true);
+	if (non_music_tracks.sfx.FM4().IsPlaying())
+		non_music_tracks.special_sfx.fm4.SetOverridden(true);
 
-	if (other_tracks.sfx.PSG3().IsPlaying())
-		other_tracks.special_sfx.psg3.SetOverridden(true);
+	if (non_music_tracks.sfx.PSG3().IsPlaying())
+		non_music_tracks.special_sfx.psg3.SetOverridden(true);
 #endif
 }
 
@@ -2070,7 +2070,7 @@ static void Sound_PlaySpecial(const unsigned int id)
 	if (state->variables.playing_1up)
 		return;
 
-	State::Shared::OtherTracks &other_tracks = state->GetOtherTracks();
+	State::Shared::NonMusicTracks &non_music_tracks = state->GetNonMusicTracks();
 
 	const unsigned char* const header = data.background_sfx.list[id].data;
 
@@ -2090,13 +2090,13 @@ static void Sound_PlaySpecial(const unsigned int id)
 			{
 				// FM
 				state->music_tracks.FM4().SetOverridden(true);
-				return other_tracks.special_sfx.fm4;
+				return non_music_tracks.special_sfx.fm4;
 			}
 			else
 			{
 				// PSG
 				state->music_tracks.PSG3().SetOverridden(true);
-				return other_tracks.special_sfx.psg3;
+				return non_music_tracks.special_sfx.psg3;
 			}
 		}();
 
@@ -2127,13 +2127,13 @@ static void Sound_PlaySpecial(const unsigned int id)
 		track_header += 6;
 	}
 
-	if (other_tracks.sfx.FM4().IsPlaying())
-		other_tracks.special_sfx.fm4.SetOverridden(true);
+	if (non_music_tracks.sfx.FM4().IsPlaying())
+		non_music_tracks.special_sfx.fm4.SetOverridden(true);
 
-	if (other_tracks.sfx.PSG3().IsPlaying())
-		other_tracks.special_sfx.psg3.SetOverridden(true);
+	if (non_music_tracks.sfx.PSG3().IsPlaying())
+		non_music_tracks.special_sfx.psg3.SetOverridden(true);
 
-	if (!other_tracks.sfx.PSG3().IsPlaying())
+	if (!non_music_tracks.sfx.PSG3().IsPlaying())
 	{
 		ClownMDSDK::MainCPU::PSG::Write(0xC0 | 0x1F);
 		ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F);
@@ -2157,13 +2157,13 @@ static void Sound_PlayCommand(const unsigned int id)
 		case 2: // StopSFX
 			state->variables.sndprio = false;
 
-			state->VisitOtherTracks(
-				[](auto &other_tracks)
+			state->VisitNonMusicTracks(
+				[](auto &non_music_tracks)
 				{
 					LockZ80BusFMSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
-							for (FMTrack &track : other_tracks.sfx.fm)
+							for (FMTrack &track : non_music_tracks.sfx.fm)
 							{
 								if (track.IsPlaying())
 								{
@@ -2175,8 +2175,8 @@ static void Sound_PlayCommand(const unsigned int id)
 									FMTrack &other_track =
 
 									#ifdef SMPS_EnableSpecSFX
-										track.voice_control == 4 && other_tracks.special_sfx.fm4.IsPlaying()
-										? other_tracks.special_sfx.fm4
+										track.voice_control == 4 && non_music_tracks.special_sfx.fm4.IsPlaying()
+										? non_music_tracks.special_sfx.fm4
 										:
 									#endif
 										// TODO: Get rid of this cast.
@@ -2193,7 +2193,7 @@ static void Sound_PlayCommand(const unsigned int id)
 						}
 					);
 
-					for (PSGTrack &track : other_tracks.sfx.psg)
+					for (PSGTrack &track : non_music_tracks.sfx.psg)
 					{
 						if (track.IsPlaying())
 						{
@@ -2205,8 +2205,8 @@ static void Sound_PlayCommand(const unsigned int id)
 							PSGTrack &other_track =
 
 							#ifdef SMPS_EnableSpecSFX
-								(track.voice_control == 0xC0 || track.voice_control == 0xE0) && other_tracks.special_sfx.psg3.IsPlaying()
-								? other_tracks.special_sfx.psg3
+								(track.voice_control == 0xC0 || track.voice_control == 0xE0) && non_music_tracks.special_sfx.psg3.IsPlaying()
+								? non_music_tracks.special_sfx.psg3
 								:
 							#endif
 								// TODO: Get rid of this cast.
@@ -2229,10 +2229,10 @@ static void Sound_PlayCommand(const unsigned int id)
 
 	#ifdef SMPS_EnableSpecSFX
 		case 3: // SpecStopSFX
-			state->VisitOtherTracks(
-				[](auto &other_tracks)
+			state->VisitNonMusicTracks(
+				[](auto &non_music_tracks)
 				{
-					FMTrack &background_sfx_fm4 = other_tracks.special_sfx.fm4;
+					FMTrack &background_sfx_fm4 = non_music_tracks.special_sfx.fm4;
 
 					if (background_sfx_fm4.IsPlaying())
 					{
@@ -2256,7 +2256,7 @@ static void Sound_PlayCommand(const unsigned int id)
 						}
 					}
 
-					PSGTrack &background_sfx_psg3 = other_tracks.special_sfx.psg3;
+					PSGTrack &background_sfx_psg3 = non_music_tracks.special_sfx.psg3;
 
 					if (background_sfx_psg3.IsPlaying())
 					{
@@ -2481,7 +2481,7 @@ static void UpdateMusic()
 		state->music_tracks.FM6().SetFM6Overridden(true);
 
 		// Mark the SFX as no longer playing, since their RAM has been trashed by the music backup.
-		state->GetOtherTracks().Iterate(
+		state->GetNonMusicTracks().Iterate(
 			[](Track &track)
 			{
 				track.SetPlaying(false);
@@ -2518,13 +2518,13 @@ static void DoFadeIn()
 			for (FMTrack &track : state->music_tracks.fm)
 				DoFM(track);
 
-			state->VisitOtherTracks(
-				[&DoFM](auto &other_tracks)
+			state->VisitNonMusicTracks(
+				[&DoFM](auto &non_music_tracks)
 				{
-					for (FMTrack &track : other_tracks.sfx.fm)
+					for (FMTrack &track : non_music_tracks.sfx.fm)
 						DoFM(track);
 				#ifdef SMPS_EnableSpecSFX
-					DoFM(other_tracks.special_sfx.fm4);
+					DoFM(non_music_tracks.special_sfx.fm4);
 				#endif
 				}
 			);
@@ -2548,13 +2548,13 @@ static void DoFadeIn()
 	DoPSG(state->music_tracks.psg_noise);
 #endif
 
-	state->VisitOtherTracks(
-		[&DoPSG](auto &other_tracks)
+	state->VisitNonMusicTracks(
+		[&DoPSG](auto &non_music_tracks)
 		{
-			for (PSGTrack &track : other_tracks.sfx.psg)
+			for (PSGTrack &track : non_music_tracks.sfx.psg)
 				DoPSG(track);
 		#ifdef SMPS_EnableSpecSFX
-			DoPSG(other_tracks.special_sfx.psg3);
+			DoPSG(non_music_tracks.special_sfx.psg3);
 		#endif
 		}
 	);
@@ -2671,14 +2671,14 @@ static void HandlePause()
 				for (FMTrack &track : state->music_tracks.fm)
 					RestoreFMTrackVoice(z80_bus, track);
 
-				state->VisitOtherTracks(
-					[&RestoreFMTrackVoice, &z80_bus](auto &other_tracks)
+				state->VisitNonMusicTracks(
+					[&RestoreFMTrackVoice, &z80_bus](auto &non_music_tracks)
 					{
-						for (FMTrack &track : other_tracks.sfx.fm)
+						for (FMTrack &track : non_music_tracks.sfx.fm)
 							RestoreFMTrackVoice(z80_bus, track);
 
 					#ifdef SMPS_EnableSpecSFX
-						RestoreFMTrackVoice(z80_bus, other_tracks.special_sfx.fm4);
+						RestoreFMTrackVoice(z80_bus, non_music_tracks.special_sfx.fm4);
 					#endif
 					}
 				);
@@ -2733,23 +2733,23 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 
 	UpdateMusic();
 
-	state->VisitOtherTracks(
-		[](auto &other_tracks)
+	state->VisitNonMusicTracks(
+		[](auto &non_music_tracks)
 		{
-			for (FMTrack &track : other_tracks.sfx.fm)
+			for (FMTrack &track : non_music_tracks.sfx.fm)
 				if (track.IsPlaying())
 					track.FMUpdateTrack();
 
-			for (PSGTrack &track : other_tracks.sfx.psg)
+			for (PSGTrack &track : non_music_tracks.sfx.psg)
 				if (track.IsPlaying())
 					track.PSGUpdateTrack();
 
 		#ifdef SMPS_EnableSpecSFX
-			if (other_tracks.special_sfx.fm4.IsPlaying())
-				other_tracks.special_sfx.fm4.FMUpdateTrack();
+			if (non_music_tracks.special_sfx.fm4.IsPlaying())
+				non_music_tracks.special_sfx.fm4.FMUpdateTrack();
 
-			if (other_tracks.special_sfx.psg3.IsPlaying())
-				other_tracks.special_sfx.psg3.PSGUpdateTrack();
+			if (non_music_tracks.special_sfx.psg3.IsPlaying())
+				non_music_tracks.special_sfx.psg3.PSGUpdateTrack();
 		#endif
 		}
 	);
