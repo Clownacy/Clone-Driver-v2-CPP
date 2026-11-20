@@ -75,7 +75,7 @@ namespace SMPS
 	{
 		unsigned char playback_control;
 		unsigned char voice_control;
-		unsigned char tempo_divider; // TODO: Move this to global variables for music tracks.
+		unsigned char tempo_divider;
 		signed char transpose;
 		unsigned char volume_attenuation;
 		unsigned char voice_index;
