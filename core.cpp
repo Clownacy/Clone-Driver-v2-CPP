@@ -1137,13 +1137,9 @@ bool DACTrack::DACDoNext()
 	return true;
 }
 
-void DACTrack::UpdateTrack()
+void DACTrack::UpdateTrackInternal(const bool begin_new_note)
 {
-#ifdef SMPS_SoundTest
-	SetSoundTest(false);
-#endif
-
-	if (--duration_timeout != 0)
+	if (!begin_new_note)
 		return;
 
 	if (!DACDoNext())
@@ -1257,13 +1253,9 @@ void FMTrack::FMNoteOff()
 	);
 }
 
-void FMTrack::UpdateTrack()
+void FMTrack::UpdateTrackInternal(const bool begin_new_note)
 {
-#ifdef SMPS_SoundTest
-	SetSoundTest(false);
-#endif
-
-	if (--duration_timeout == 0)
+	if (begin_new_note)
 	{
 		SetHeld(false);
 
@@ -1433,13 +1425,9 @@ void FMTrack::FMSetFreq(const unsigned char note)
 // PSG //
 /////////
 
-void PSGToneTrack::UpdateTrack()
+void PSGToneTrack::UpdateTrackInternal(const bool begin_new_note)
 {
-#ifdef SMPS_SoundTest
-	SetSoundTest(false);
-#endif
-
-	if (--duration_timeout == 0)
+	if (begin_new_note)
 	{
 		SetHeld(false);
 
@@ -1726,13 +1714,9 @@ bool PSGNoiseTrack::PSGNoiseDoNext()
 	return true;
 }
 
-void PSGNoiseTrack::UpdateTrack()
+void PSGNoiseTrack::UpdateTrackInternal(const bool begin_new_note)
 {
-#ifdef SMPS_SoundTest
-	SetSoundTest(false);
-#endif
-
-	if (--duration_timeout == 0)
+	if (begin_new_note)
 	{
 		SetResting(false);
 
@@ -2477,13 +2461,7 @@ static void DoMusicTempoSpeedup()
 
 static void UpdateMusic()
 {
-	state->music_tracks.Iterate(
-		[](auto &track)
-		{
-			if (track.IsPlaying())
-				track.UpdateTrack();
-		}
-	);
+	state->music_tracks.Update();
 
 	TempoWait();
 
@@ -2781,13 +2759,7 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 
 	UpdateMusic();
 
-	state->shared.IterateNonMusicTracks(
-		[](auto &track)
-		{
-			if (track.IsPlaying())
-				track.UpdateTrack();
-		}
-	);
+	state->shared.UpdateNonMusicTracks();
 }
 
 // TODO: Proper sign extension considering alternate integer sizes!

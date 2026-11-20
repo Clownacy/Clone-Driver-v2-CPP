@@ -109,6 +109,19 @@ namespace SMPS
 		};
 
 		// Generic
+		void UpdateTrack(this auto &self)
+		{
+			if (!self.IsPlaying())
+				return;
+
+		#ifdef SMPS_SoundTest
+			self.SetSoundTest(false);
+		#endif
+
+			const bool begin_new_note = --self.duration_timeout == 0;
+
+			self.UpdateTrackInternal(begin_new_note);
+		}
 		void cfJumpTo();
 		void FinishTrackUpdate();
 		void SetDuration(unsigned int duration);
@@ -171,7 +184,7 @@ namespace SMPS
 	{
 		void DACUpdateSample();
 		[[nodiscard]] bool DACDoNext();
-		void UpdateTrack();
+		void UpdateTrackInternal(bool begin_new_note);
 		void ApplyDACVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 	};
 
@@ -186,7 +199,7 @@ namespace SMPS
 		void SendFMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 		void FMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 		void FMNoteOff();
-		void UpdateTrack();
+		void UpdateTrackInternal(bool begin_new_note);
 		[[nodiscard]] bool FMUpdateFreq();
 		[[nodiscard]] bool FMPrepareNote();
 		[[nodiscard]] bool FMDoNext();
@@ -220,13 +233,13 @@ namespace SMPS
 
 	struct PSGToneTrack : PSGTrack
 	{
-		void UpdateTrack();
+		void UpdateTrackInternal(bool begin_new_note);
 	};
 
 #ifdef SMPS_EnablePSGNoiseDrums
 	struct PSGNoiseTrack : PSGTrack
 	{
-		void UpdateTrack();
+		void UpdateTrackInternal(bool begin_new_note);
 		[[nodiscard]] bool PSGNoiseDoNext();
 		void PSGNoiseSetDrumNote(unsigned char note);
 	};
@@ -342,7 +355,20 @@ namespace SMPS
 
 		unsigned char music_tempo_modifier, music_tempo_modifier_master;
 
-		struct MusicTracks
+		struct TrackCollection
+		{
+			void Update(this auto &self)
+			{
+				self.Iterate(
+					[](auto &track)
+					{
+						track.UpdateTrack();
+					}
+				);
+			}
+		};
+
+		struct MusicTracks : TrackCollection
 		{
 			DACTrack dac;
 			std::array<FMMusicTrack, 6> fm;
@@ -385,7 +411,7 @@ namespace SMPS
 				Variables variables;
 			};
 
-			struct NonMusicTracks
+			struct NonMusicTracks : TrackCollection
 			{
 				struct
 				{
@@ -488,6 +514,26 @@ namespace SMPS
 				);
 			}
 
+			void IterateNonMusicTracks(const auto &callback)
+			{
+				VisitNonMusicTracks(
+					[&callback](auto &non_music_tracks)
+					{
+						non_music_tracks.Iterate(callback);
+					}
+				);
+			}
+
+			void UpdateNonMusicTracks()
+			{
+				VisitNonMusicTracks(
+					[](auto &non_music_tracks)
+					{
+						non_music_tracks.Update();
+					}
+				);
+			}
+
 			NonMusicTracks& GetNonMusicTracks()
 			{
 				return Visit(
@@ -512,16 +558,6 @@ namespace SMPS
 					[](NonMusicTracks&) -> MusicBackup&
 					{
 						std::unreachable();
-					}
-				);
-			}
-
-			void IterateNonMusicTracks(const auto &callback)
-			{
-				VisitNonMusicTracks(
-					[&callback](auto &non_music_tracks)
-					{
-						non_music_tracks.Iterate(callback);
 					}
 				);
 			}
