@@ -297,6 +297,31 @@ namespace SMPS
 
 	struct State
 	{
+		Variables variables;
+
+	#ifdef SMPS_GloopSFXBehaviour
+		bool gloop_toggle : 1;
+	#endif
+	#ifdef SMPS_EnableSpinDashSFX
+		bool spindash_lastsound : 1;
+	#endif
+	#ifdef SMPS_PushSFXBehaviour
+		bool push_playing : 1;
+	#endif
+	#ifdef SMPS_EnableContSFX
+		bool continuous_sfx : 1;
+	#endif
+		bool pal : 1;
+
+		unsigned char pause;
+
+	#ifdef SMPS_EnableSpinDashSFX
+		unsigned char spindash_timer;
+		unsigned char spindash_pitch;
+	#endif
+
+		unsigned char music_tempo_modifier, music_tempo_modifier_master;
+
 		struct MusicTracks
 		{
 			DACTrack dac;
@@ -486,31 +511,6 @@ namespace SMPS
 				}
 			);
 		}
-
-	#ifdef SMPS_GloopSFXBehaviour
-		bool gloop_toggle : 1;
-	#endif
-	#ifdef SMPS_EnableSpinDashSFX
-		bool spindash_lastsound : 1;
-	#endif
-	#ifdef SMPS_PushSFXBehaviour
-		bool push_playing : 1;
-	#endif
-	#ifdef SMPS_EnableContSFX
-		bool continuous_sfx : 1;
-	#endif
-		bool pal : 1;
-
-		unsigned char pause;
-
-	#ifdef SMPS_EnableSpinDashSFX
-		unsigned char spindash_timer;
-		unsigned char spindash_pitch;
-	#endif
-
-		unsigned char music_tempo_modifier, music_tempo_modifier_master;
-
-		Variables variables;
 	};
 
 	struct Priority
