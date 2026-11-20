@@ -376,7 +376,7 @@ namespace SMPS
 			std::array<FMMusicTrack, 6> fm;
 			std::array<PSGMelodyTrack, 3> psg;
 		#ifdef SMPS_EnablePSGNoiseDrums
-			PSGDrumTrack psg_noise;
+			PSGDrumTrack psg_drum;
 		#endif
 
 			auto& FM1()  { return fm[0]; }
@@ -397,7 +397,7 @@ namespace SMPS
 				for (auto &track : psg)
 					callback(track);
 			#ifdef SMPS_EnablePSGNoiseDrums
-				callback(psg_noise);
+				callback(psg_drum);
 			#endif
 			}
 

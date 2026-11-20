@@ -998,7 +998,7 @@ bool Track::IsMusic() const
 #ifdef SMPS_EnablePSGNoiseDrums
 bool Track::IsPSGNoise() const
 {
-	return this == &state->music_tracks.psg_noise;
+	return this == &state->music_tracks.psg_drum;
 }
 #endif
 
@@ -2635,7 +2635,7 @@ static void DoFadeOut()
 	}
 
 #ifdef SMPS_EnablePSGNoiseDrums
-	PSGTrack &psg_track = state->music_tracks.psg_noise;
+	PSGTrack &psg_track = state->music_tracks.psg_drum;
 
 	if (psg_track.IsPlaying())
 	{

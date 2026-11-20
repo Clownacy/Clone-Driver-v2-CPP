@@ -64,7 +64,7 @@ STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, c
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.psg_noise;
+			return &state->music_tracks.psg_drum;
 	#endif
 
 		return state->shared.Visit(
