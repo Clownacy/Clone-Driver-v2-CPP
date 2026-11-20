@@ -416,7 +416,7 @@ bool Track::CoordFlag(const unsigned int flag)
 					ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
-							track.ApplyDACVolumeAttenuation(z80_bus);
+							track.ApplyVolumeAttenuation(z80_bus);
 						}
 					);
 				},
@@ -447,7 +447,7 @@ bool Track::CoordFlag(const unsigned int flag)
 					LockZ80BusFMSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
-							track.FMNoteOff(z80_bus);
+							track.NoteOff(z80_bus);
 
 							if (state->shared.GetNonMusicTracks().sfx.FM4().IsPlaying())
 								return;
@@ -512,7 +512,7 @@ bool Track::CoordFlag(const unsigned int flag)
 					LockZ80BusFMSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
-							track.FMSilenceChannel(z80_bus);
+							track.SilenceChannel(z80_bus);
 							track.SetVoice(z80_bus);
 						}
 					);
@@ -542,7 +542,7 @@ bool Track::CoordFlag(const unsigned int flag)
 					LockZ80BusFMSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
-							track.FMSilenceChannel(z80_bus);
+							track.SilenceChannel(z80_bus);
 						}
 					);
 				},
@@ -564,11 +564,11 @@ bool Track::CoordFlag(const unsigned int flag)
 			Visit(
 				[](FMTrack &track)
 				{
-					track.FMNoteOff();
+					track.NoteOff();
 				},
 				[](PSGTrack &track)
 				{
-					track.PSGNoteOff();
+					track.NoteOff();
 				},
 			#ifdef SMPS_EnablePWM
 				[](PWMTrack&) {},
@@ -758,7 +758,7 @@ bool Track::CoordFlag(const unsigned int flag)
 					LockZ80BusFMSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
-							track.ApplyDACVolumeAttenuation(z80_bus);
+							track.ApplyVolumeAttenuation(z80_bus);
 						}
 					);
 				},
@@ -862,11 +862,11 @@ bool Track::NoteTimeoutUpdate()
 	Visit(
 		[](FMTrack &track)
 		{
-			track.FMNoteOff();
+			track.NoteOff();
 		},
 		[](PSGTrack &track)
 		{
-			track.PSGNoteOff();
+			track.NoteOff();
 		},
 	#ifdef SMPS_EnablePWM
 		[](PWMTrack&) {},
@@ -955,11 +955,11 @@ std::optional<unsigned int> Track::DoModulationEnvelope()
 					Visit(
 						[](FMTrack &track)
 						{
-							track.FMNoteOff();
+							track.NoteOff();
 						},
 						[](PSGTrack &track)
 						{
-							track.PSGNoteOff();
+							track.NoteOff();
 						},
 					#ifdef SMPS_EnablePWM
 						[](PWMTrack&) {},
@@ -1073,7 +1073,7 @@ std::optional<unsigned char> Track::GetNoteOrDuration()
 // DAC //
 /////////
 
-void DACTrack::DACUpdateSample()
+void DACTrack::UpdateSample()
 {
 	if (freq == 0x80)
 		return;
@@ -1104,7 +1104,7 @@ void DACTrack::DACUpdateSample()
 #endif
 }
 
-bool DACTrack::DACDoNext()
+bool DACTrack::DoNext()
 {
 	const auto note_or_duration = GetNoteOrDuration();
 
@@ -1142,13 +1142,13 @@ void DACTrack::UpdateTrackInternal(const bool begin_new_note)
 	if (!begin_new_note)
 		return;
 
-	if (!DACDoNext())
+	if (!DoNext())
 		return;
 
-	DACUpdateSample();
+	UpdateSample();
 }
 
-void DACTrack::ApplyDACVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+void DACTrack::ApplyVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 {
 	WriteDACVolumeAttenuation(z80_bus, 0, std::min(0x7F, state->variables.fadein_counter * 4 + volume_attenuation) / 8);
 }
@@ -1214,7 +1214,7 @@ void FMTrack::SetVoice(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 	WriteFMIorII(z80_bus, 0xB4, ams_fms_pan);
 }
 
-void FMTrack::FMSilenceChannel(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+void FMTrack::SilenceChannel(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 {
 	const auto write_regs = [this, &z80_bus](const unsigned int port, const unsigned int value)
 	{
@@ -1224,23 +1224,23 @@ void FMTrack::FMSilenceChannel(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 
 	write_regs(0x40, 0x7F);
 	write_regs(0x80, 0x0F);
-	SendFMNoteOff(z80_bus);
+	SendNoteOff(z80_bus);
 }
 
-void FMTrack::SendFMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+void FMTrack::SendNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 {
 	z80_bus.WriteFMI(0x28, voice_control);
 }
 
-void FMTrack::FMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+void FMTrack::NoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 {
 	if (IsOverridden() || IsHeld())
 		return;
 
-	SendFMNoteOff(z80_bus);
+	SendNoteOff(z80_bus);
 }
 
-void FMTrack::FMNoteOff()
+void FMTrack::NoteOff()
 {
 	if (IsOverridden() || IsHeld())
 		return;
@@ -1248,7 +1248,7 @@ void FMTrack::FMNoteOff()
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			SendFMNoteOff(z80_bus);
+			SendNoteOff(z80_bus);
 		}
 	);
 }
@@ -1259,7 +1259,7 @@ void FMTrack::UpdateTrackInternal(const bool begin_new_note)
 	{
 		SetHeld(false);
 
-		if (!FMDoNext())
+		if (!DoNext())
 			return;
 
 		if (IsResting())
@@ -1267,10 +1267,10 @@ void FMTrack::UpdateTrackInternal(const bool begin_new_note)
 
 		DoModulation();
 
-		if (!FMPrepareNote())
+		if (!PrepareNote())
 			return;
 
-		FMNoteOn();
+		NoteOn();
 	}
 	else
 	{
@@ -1282,12 +1282,12 @@ void FMTrack::UpdateTrackInternal(const bool begin_new_note)
 
 		DoModulation();
 
-		if (!FMUpdateFreq())
+		if (!UpdateFreq())
 			return;
 	}
 }
 
-bool FMTrack::FMUpdateFreq()
+bool FMTrack::UpdateFreq()
 {
 #ifdef SMPS_EnableModulationEnvelopes
 	if (modulation_ctrl == 0)
@@ -1296,13 +1296,13 @@ bool FMTrack::FMUpdateFreq()
 #endif
 		return true;
 
-	if (!FMPrepareNote())
+	if (!PrepareNote())
 		return false;
 
 	return true;
 }
 
-bool FMTrack::FMPrepareNote()
+bool FMTrack::PrepareNote()
 {
 	if (IsOverridden())
 		return true;
@@ -1323,7 +1323,7 @@ bool FMTrack::FMPrepareNote()
 	return true;
 }
 
-bool FMTrack::FMDoNext()
+bool FMTrack::DoNext()
 {
 	SetResting(false);
 
@@ -1334,7 +1334,7 @@ bool FMTrack::FMDoNext()
 
 	unsigned char value = *note_or_duration;
 
-	FMNoteOff();
+	NoteOff();
 
 	assert(value >= 0x80 || freq != 0);
 
@@ -1347,7 +1347,7 @@ bool FMTrack::FMDoNext()
 	}
 	else
 	{
-		FMSetFreq(value);
+		SetFreq(value);
 
 		value = *data_pointer++;
 
@@ -1361,7 +1361,7 @@ bool FMTrack::FMDoNext()
 	return true;
 }
 
-void FMTrack::FMNoteOn()
+void FMTrack::NoteOn()
 {
 	if (IsOverridden())
 		return;
@@ -1405,7 +1405,7 @@ static constexpr std::array FMFrequencies = []() constexpr
 	return frequencies;
 }();
 
-void FMTrack::FMSetFreq(const unsigned char note)
+void FMTrack::SetFreq(const unsigned char note)
 {
 	if (note == 0x80)
 	{
@@ -1431,7 +1431,7 @@ void PSGMelodyTrack::UpdateTrackInternal(const bool begin_new_note)
 	{
 		SetHeld(false);
 
-		if (!PSGDoNext())
+		if (!DoNext())
 			return;
 
 		if (IsResting())
@@ -1439,10 +1439,10 @@ void PSGMelodyTrack::UpdateTrackInternal(const bool begin_new_note)
 
 		DoModulation();
 
-		if (!PSGDoNoteOn())
+		if (!DoNoteOn())
 			return;
 
-		if (!PSGDoVolFX())
+		if (!DoVolFX())
 			return;
 	}
 	else
@@ -1453,17 +1453,17 @@ void PSGMelodyTrack::UpdateTrackInternal(const bool begin_new_note)
 		if (!NoteTimeoutUpdate())
 			return;
 
-		if (!PSGUpdateVolFX())
+		if (!UpdateVolFX())
 			return;
 
 		DoModulation();
 
-		if (!PSGUpdateFreq())
+		if (!UpdateFreq())
 			return;
 	}
 }
 
-bool PSGTrack::PSGUpdateFreq()
+bool PSGTrack::UpdateFreq()
 {
 #ifdef SMPS_EnableModulationEnvelopes
 	if (modulation_ctrl == 0)
@@ -1472,10 +1472,10 @@ bool PSGTrack::PSGUpdateFreq()
 #endif
 		return true;
 
-	return PSGDoNoteOn();
+	return DoNoteOn();
 }
 
-bool PSGTrack::PSGDoNoteOn()
+bool PSGTrack::DoNoteOn()
 {
 	if (IsOverridden())
 		return true;
@@ -1493,7 +1493,7 @@ bool PSGTrack::PSGDoNoteOn()
 	return true;
 }
 
-bool PSGTrack::PSGDoNext()
+bool PSGTrack::DoNext()
 {
 	SetResting(false);
 
@@ -1515,7 +1515,7 @@ bool PSGTrack::PSGDoNext()
 	}
 	else
 	{
-		PSGSetFreq(value);
+		SetFreq(value);
 
 		value = *data_pointer++;
 
@@ -1555,13 +1555,13 @@ static constexpr auto PSGFrequencies = MakePSGFrequencies<unsigned int>({
 	4142.98,   4302.32,   4660.85,   4863.50,   5084.56,   5326.69,   5887.39,   6214.47,   6580.02,   6991.28, 223721.56, 223721.56
 });
 
-void PSGTrack::PSGSetFreq(const unsigned char note)
+void PSGTrack::SetFreq(const unsigned char note)
 {
 	if (note < 0x81)
 	{
 		SetResting(true);
 		freq = -1;
-		PSGNoteOff();
+		NoteOff();
 		return;
 	}
 
@@ -1572,18 +1572,18 @@ void PSGTrack::PSGSetFreq(const unsigned char note)
 	freq = PSGFrequencies[index];
 }
 
-bool PSGTrack::PSGUpdateVolFX()
+bool PSGTrack::UpdateVolFX()
 {
 	if (voice_index == 0)
 		return true;
 
-	if (!PSGDoVolFX())
+	if (!DoVolFX())
 		return false;
 
 	return true;
 }
 
-bool PSGTrack::PSGDoVolFX()
+bool PSGTrack::DoVolFX()
 {
 	unsigned int psg_volume_attenuation = volume_attenuation;
 
@@ -1611,7 +1611,7 @@ bool PSGTrack::PSGDoVolFX()
 
 				case 0x83: // Stop
 					SetResting(true);
-					PSGNoteOff();
+					NoteOff();
 					return false;
 			}
 
@@ -1621,11 +1621,11 @@ bool PSGTrack::PSGDoVolFX()
 		}
 	}
 
-	SetPSGVolumeAttenuation(psg_volume_attenuation);
+	SetVolumeAttenuation(psg_volume_attenuation);
 	return true;
 }
 
-void PSGTrack::SetPSGVolumeAttenuation(const unsigned int psg_volume_attenuation)
+void PSGTrack::SetVolumeAttenuation(const unsigned int psg_volume_attenuation)
 {
 	if (IsResting() || IsOverridden())
 		return;
@@ -1636,7 +1636,7 @@ void PSGTrack::SetPSGVolumeAttenuation(const unsigned int psg_volume_attenuation
 	ClownMDSDK::MainCPU::PSG::Write(0x10 | voice_control | std::min(0xFU, (psg_volume_attenuation + state->variables.fadein_counter * 4) >> 3));
 }
 
-void PSGTrack::SendPSGNoteOff()
+void PSGTrack::SendNoteOff()
 {
 	ClownMDSDK::MainCPU::PSG::Write(voice_control | 0x1F);
 
@@ -1644,12 +1644,12 @@ void PSGTrack::SendPSGNoteOff()
 		ClownMDSDK::MainCPU::PSG::Write(0xFF);
 }
 
-void PSGTrack::PSGNoteOff()
+void PSGTrack::NoteOff()
 {
 	if (IsOverridden())
 		return;
 
-	SendPSGNoteOff();
+	SendNoteOff();
 }
 
 ////////////////////
@@ -1657,11 +1657,11 @@ void PSGTrack::PSGNoteOff()
 ////////////////////
 
 #ifdef SMPS_EnablePSGNoiseDrums
-void PSGDrumTrack::PSGNoiseSetDrumNote(const unsigned char note)
+void PSGDrumTrack::SetDrumNote(const unsigned char note)
 {
 	if (note < 0x81)
 	{
-		PSGNoteOff();
+		NoteOff();
 		return;
 	}
 
@@ -1680,7 +1680,7 @@ void PSGDrumTrack::PSGNoiseSetDrumNote(const unsigned char note)
 	ClownMDSDK::MainCPU::PSG::Write(drum.noise_mode);
 }
 
-bool PSGDrumTrack::PSGNoiseDoNext()
+bool PSGDrumTrack::DoNext()
 {
 	const auto note_or_duration = GetNoteOrDuration();
 
@@ -1695,7 +1695,7 @@ bool PSGDrumTrack::PSGNoiseDoNext()
 	}
 	else
 	{
-		PSGNoiseSetDrumNote(value);
+		SetDrumNote(value);
 
 		value = *data_pointer++;
 
@@ -1720,16 +1720,14 @@ void PSGDrumTrack::UpdateTrackInternal(const bool begin_new_note)
 	{
 		SetResting(false);
 
-		if (!PSGNoiseDoNext())
+		if (!DoNext())
 			return;
 	}
 	else
 	{
-		if (!PSGUpdateVolFX())
+		if (!UpdateVolFX())
 			return;
 	}
-
-//	DACUpdateSample();
 }
 #endif
 
@@ -1935,12 +1933,12 @@ static void Sound_PlayBGM(const unsigned int id)
 		{
 			for (FMTrack &track : state->music_tracks.fm)
 				if (!track.IsOverridden())
-					track.FMSilenceChannel(z80_bus);
+					track.SilenceChannel(z80_bus);
 		}
 	);
 
 	for (PSGTrack &track : state->music_tracks.psg)
-		track.PSGNoteOff();
+		track.NoteOff();
 
 #ifdef SMPS_EnablePWM
 	PWMSilenceAll();
@@ -2216,7 +2214,7 @@ static void Sound_PlayCommand(const unsigned int id)
 									track.SetPlaying(false);
 									track.SetHeld(false);
 
-									track.FMNoteOff(z80_bus);
+									track.NoteOff(z80_bus);
 
 									FMTrack &other_track =
 
@@ -2246,7 +2244,7 @@ static void Sound_PlayCommand(const unsigned int id)
 							track.SetPlaying(false);
 							track.SetHeld(false);
 
-							track.PSGNoteOff();
+							track.NoteOff();
 
 							PSGTrack &other_track =
 
@@ -2289,7 +2287,7 @@ static void Sound_PlayCommand(const unsigned int id)
 							LockZ80BusFMSafe(
 								[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 								{
-									background_sfx_fm4.SendFMNoteOff(z80_bus);
+									background_sfx_fm4.SendNoteOff(z80_bus);
 
 									FMTrack &music_fm4 = state->music_tracks.FM4();
 									music_fm4.SetOverridden(false);
@@ -2310,7 +2308,7 @@ static void Sound_PlayCommand(const unsigned int id)
 
 						if (!background_sfx_psg3.IsOverridden())
 						{
-							background_sfx_psg3.SendPSGNoteOff();
+							background_sfx_psg3.SendNoteOff();
 
 							PSGTrack &music_psg3 = state->music_tracks.PSG3();
 							music_psg3.SetOverridden(false);
@@ -2486,7 +2484,7 @@ static void UpdateMusic()
 				DACTrack &dac_track = state->music_tracks.dac;
 
 				if (dac_track.IsPlaying())
-					dac_track.ApplyDACVolumeAttenuation(z80_bus);
+					dac_track.ApplyVolumeAttenuation(z80_bus);
 
 				for (FMTrack &fm_track : state->music_tracks.fm)
 				{
@@ -2504,7 +2502,7 @@ static void UpdateMusic()
 			if (psg_track.IsPlaying())
 			{
 				psg_track.SetResting(true);
-				psg_track.PSGNoteOff();
+				psg_track.NoteOff();
 
 				if (psg_track.voice_control == 0xE0)
 					ClownMDSDK::MainCPU::PSG::Write(psg_track.psg_noise);
@@ -2534,7 +2532,7 @@ static void DoFadeIn()
 				[&z80_bus](DACTrack &track)
 				{
 					if (track.IsPlaying())
-						track.ApplyDACVolumeAttenuation(z80_bus);
+						track.ApplyVolumeAttenuation(z80_bus);
 				},
 				[&z80_bus](FMTrack &track)
 				{
@@ -2557,7 +2555,7 @@ static void DoFadeIn()
 				// If a volume envelope is active, then it will handle updating the volume for us.
 				// Doing it manually will just conflict with it.
 				if (track.voice_index == 0)
-					track.SetPSGVolumeAttenuation(track.volume_attenuation);
+					track.SetVolumeAttenuation(track.volume_attenuation);
 			}
 		},
 	#ifdef SMPS_EnablePWM
@@ -2596,7 +2594,7 @@ static void DoFadeOut()
 				if (dac_track.volume_attenuation >= 0x80)
 					dac_track.SetPlaying(false);
 				else
-					dac_track.ApplyDACVolumeAttenuation(z80_bus);
+					dac_track.ApplyVolumeAttenuation(z80_bus);
 			}
 
 			for (FMTrack &fm_track : state->music_tracks.fm)
@@ -2629,7 +2627,7 @@ static void DoFadeOut()
 				// If a volume envelope is active, then it will handle updating the volume for us.
 				// Doing it manually will just conflict with it.
 				if (psg_track.voice_index == 0)
-					psg_track.SetPSGVolumeAttenuation(psg_track.volume_attenuation);
+					psg_track.SetVolumeAttenuation(psg_track.volume_attenuation);
 			}
 		}
 	}

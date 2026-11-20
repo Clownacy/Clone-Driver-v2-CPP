@@ -182,10 +182,10 @@ namespace SMPS
 
 	struct DACTrack : YM2612Track
 	{
-		void DACUpdateSample();
-		[[nodiscard]] bool DACDoNext();
+		void UpdateSample();
+		[[nodiscard]] bool DoNext();
 		void UpdateTrackInternal(bool begin_new_note);
-		void ApplyDACVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void ApplyVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 	};
 
 	struct FMTrack : YM2612Track
@@ -195,16 +195,16 @@ namespace SMPS
 		void SendVoiceTLCommon(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const Voice &voice, bool force_upload);
 		void SendVoiceTL(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 		void SetVoice(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void FMSilenceChannel(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void SendFMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void FMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void FMNoteOff();
+		void SilenceChannel(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void SendNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void NoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void NoteOff();
 		void UpdateTrackInternal(bool begin_new_note);
-		[[nodiscard]] bool FMUpdateFreq();
-		[[nodiscard]] bool FMPrepareNote();
-		[[nodiscard]] bool FMDoNext();
-		void FMNoteOn();
-		void FMSetFreq(unsigned char note);
+		[[nodiscard]] bool UpdateFreq();
+		[[nodiscard]] bool PrepareNote();
+		[[nodiscard]] bool DoNext();
+		void NoteOn();
+		void SetFreq(unsigned char note);
 	};
 
 	struct FMMusicTrack : FMTrack
@@ -220,15 +220,15 @@ namespace SMPS
 		unsigned char vol_env_index;
 		unsigned char psg_noise;
 
-		[[nodiscard]] bool PSGUpdateFreq();
-		[[nodiscard]] bool PSGDoNoteOn();
-		[[nodiscard]] bool PSGDoNext();
-		void PSGSetFreq(unsigned char note);
-		[[nodiscard]] bool PSGUpdateVolFX();
-		[[nodiscard]] bool PSGDoVolFX();
-		void SetPSGVolumeAttenuation(unsigned int psg_volume);
-		void SendPSGNoteOff();
-		void PSGNoteOff();
+		[[nodiscard]] bool UpdateFreq();
+		[[nodiscard]] bool DoNoteOn();
+		[[nodiscard]] bool DoNext();
+		void SetFreq(unsigned char note);
+		[[nodiscard]] bool UpdateVolFX();
+		[[nodiscard]] bool DoVolFX();
+		void SetVolumeAttenuation(unsigned int psg_volume);
+		void SendNoteOff();
+		void NoteOff();
 	};
 
 	struct PSGMelodyTrack : PSGTrack
@@ -240,8 +240,8 @@ namespace SMPS
 	struct PSGDrumTrack : PSGTrack
 	{
 		void UpdateTrackInternal(bool begin_new_note);
-		[[nodiscard]] bool PSGNoiseDoNext();
-		void PSGNoiseSetDrumNote(unsigned char note);
+		[[nodiscard]] bool DoNext();
+		void SetDrumNote(unsigned char note);
 	};
 #endif
 
