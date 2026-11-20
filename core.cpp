@@ -63,71 +63,61 @@ static constexpr auto our_lround(const double frequency)
 	return static_cast<long>(frequency + 0.5);
 };
 
-static Track& SFX_BGMChannelRAM(const unsigned int index)
+static Track& SFX_BGMChannelRAM(const unsigned int voice_control)
 {
-	switch (index)
+	switch (voice_control)
 	{
 		default:
 			std::unreachable();
 
-		case 0:
+		case 2:
 			return state->tracks.music.FM3();
 
-		case 1:
-			std::unreachable(); // Padding.
-
-		case 2:
+		case 4:
 			return state->tracks.music.FM4();
 
-		case 3:
+		case 5:
 			return state->tracks.music.FM5();
 
-		case 4:
+		case 0x80:
 			return state->tracks.music.PSG1();
 
-		case 5:
+		case 0xA0:
 			return state->tracks.music.PSG2();
 
-		case 6:
-			return state->tracks.music.PSG3(); // Plain PSG3
-
-		case 7:
-			return state->tracks.music.PSG3(); // Noise
+		case 0xC0: // Plain PSG3
+		case 0xE0: // Noise
+			return state->tracks.music.PSG3();
 	}
 }
 
-static Track& SFX_SFXChannelRAM(const unsigned int index)
+static Track& SFX_SFXChannelRAM(const unsigned int voice_control)
 {
 	State::Tracks::Shared::NonMusicTracks &non_music_tracks = state->tracks.shared.GetNonMusicTracks();
 
-	switch (index)
+	switch (voice_control)
 	{
 		default:
 			std::unreachable();
 
-		case 0:
+		case 2:
 			return non_music_tracks.sfx.FM3();
 
-		case 1:
-			std::unreachable(); // Padding.
-
-		case 2:
+		case 4:
 			return non_music_tracks.sfx.FM4();
 
-		case 3:
+		case 5:
 			return non_music_tracks.sfx.FM5();
 
-		case 4:
+		case 0x80:
 			return non_music_tracks.sfx.PSG1();
 
-		case 5:
+		case 0xA0:
 			return non_music_tracks.sfx.PSG2();
 
-		case 6:
-			return non_music_tracks.sfx.PSG3(); // Plain PSG3
-
-		case 7:
-			return non_music_tracks.sfx.PSG3(); // Noise
+		case 0xC0: // Plain PSG3
+		case 0xE0: // Noise
+			return non_music_tracks.sfx.PSG3();
 	}
 }
 
@@ -595,7 +585,7 @@ bool Track::CoordFlag(const unsigned int flag)
 						track.voice_control == 4 && special_fm4.IsPlaying() ? special_fm4 :
 					#endif
 						// TODO: Get rid of this dumb cast.
-						static_cast<FMTrack&>(SFX_BGMChannelRAM(track.voice_control - 2));
+						static_cast<FMTrack&>(SFX_BGMChannelRAM(track.voice_control));
 
 					if (!other_track.IsPlaying())
 						return;
@@ -610,15 +600,15 @@ bool Track::CoordFlag(const unsigned int flag)
 						}
 					);
 				},
-				[&non_music_tracks](PSGTrack &track)
+				[&non_music_tracks](PSGMelodyTrack &track)
 				{
 					// TODO: Get rid of this dumb cast.
-					PSGTrack &other_track = static_cast<PSGTrack&>(SFX_BGMChannelRAM(track.voice_control >> 5)); // TODO: Cast to unsigned integer?
+					PSGTrack &other_track = static_cast<PSGTrack&>(SFX_BGMChannelRAM(track.voice_control)); // TODO: Cast to unsigned integer?
 
 					other_track.SetOverridden(false);
 					other_track.SetResting(true);
 				},
-				[&non_music_tracks](PSG3MelodyTrack &track)
+				[&non_music_tracks](PSG3MelodyTrack&)
 				{
 				#ifdef SMPS_EnableSpecSFX
 					auto &special_psg3 = non_music_tracks.special_sfx.psg3;
@@ -628,8 +618,7 @@ bool Track::CoordFlag(const unsigned int flag)
 					#ifdef SMPS_EnableSpecSFX
 						special_psg3.IsPlaying() ? special_psg3 :
 					#endif
-						// TODO: Get rid of this dumb cast.
-						static_cast<PSG3MelodyTrack&>(SFX_BGMChannelRAM(track.voice_control >> 5)); // TODO: Cast to unsigned integer?
+						state->tracks.music.PSG3();
 
 					other_track.SetOverridden(false);
 					other_track.SetResting(true);
@@ -637,6 +626,12 @@ bool Track::CoordFlag(const unsigned int flag)
 					if (other_track.voice_control == 0xE0)
 						ClownMDSDK::MainCPU::PSG::Write(other_track.psg_noise);
 				},
+			#ifdef SMPS_EnablePSGNoiseDrums
+				[&non_music_tracks](PSGDrumTrack &track)
+				{
+					std::unreachable();
+				},
+			#endif
 			#ifdef SMPS_EnablePWM
 				[](PWMTrack&) {},
 			#endif
@@ -1835,14 +1830,14 @@ static void Sound_PlayBGM(const unsigned int id)
 	if (music.ignore_speedup)
 		state->variables.ignore_speedup = true;
 
-	const auto voice_offset = ReadAlignedSignedWord(&header[0]);
+	const auto voices_offset = ReadAlignedSignedWord(&header[0]);
 	state->variables.music_voices =
 #ifdef SMPS_EnableUniversalVoiceBank
-		voice_offset == 0
+		voices_offset == 0
 		? data.universal_voice_bank
 		:
 #endif
-		reinterpret_cast<const Voice*>(&header[voice_offset]);
+		reinterpret_cast<const Voice*>(&header[voices_offset]);
 
 	const unsigned int total_dac_and_fm_tracks = header[2];
 	const unsigned int total_psg_tracks = header[3];
@@ -1926,7 +1921,7 @@ static void Sound_PlayBGM(const unsigned int id)
 				[](Track &track)
 				{
 					if (track.IsPlaying())
-						SFX_BGMChannelRAM(track.IsPSG() ? track.voice_control >> 5 : track.voice_control - 2).SetOverridden(true);
+						SFX_BGMChannelRAM(track.voice_control).SetOverridden(true);
 				}
 			);
 
@@ -1978,7 +1973,15 @@ static void Sound_PlaySFX(const unsigned int id)
 
 	const unsigned char* const header = sfx.data;
 
-	const Voice* const voices = reinterpret_cast<const Voice*>(&header[ReadAlignedSignedWord(&header[0])]);
+	const auto voices_offset = ReadAlignedSignedWord(&header[0]);
+	const Voice* const voices =
+#ifdef SMPS_EnableUniversalVoiceBank
+		voices_offset == 0
+		? data.universal_voice_bank
+		:
+#endif
+		reinterpret_cast<const Voice*>(&header[voices_offset]);
+
 	const unsigned char tempo_divider = header[2];
 	const unsigned int total_tracks = header[3];
 	const unsigned char *track_header = &header[4];
@@ -2042,19 +2045,12 @@ static void Sound_PlaySFX(const unsigned int id)
 	for (unsigned int i = 0; i < total_tracks; ++i)
 	{
 		const unsigned char voice_control = track_header[1];
-		unsigned int track_lookup_index;
 
-		if (voice_control < 0x80)
-		{
-			// FM
-			track_lookup_index = voice_control - 2;
-			SFX_BGMChannelRAM(track_lookup_index).SetOverridden(true);
-		}
-		else
+		SFX_BGMChannelRAM(voice_control).SetOverridden(true);
+
+		if (voice_control >= 0x80)
 		{
 			// PSG
-			track_lookup_index = voice_control >> 5; // TODO: Cast to unsigned integer?
-			SFX_BGMChannelRAM(track_lookup_index).SetOverridden(true);
 
 			// Silence PSG channel.
 			ClownMDSDK::MainCPU::PSG::Write(voice_control | 0x1F);
@@ -2064,7 +2060,7 @@ static void Sound_PlaySFX(const unsigned int id)
 				ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F);
 		}
 
-		auto &track = SFX_SFXChannelRAM(track_lookup_index);
+		auto &track = SFX_SFXChannelRAM(voice_control);
 
 		track = {};
 
@@ -2127,7 +2123,15 @@ static void Sound_PlaySpecial(const unsigned int id)
 
 	const unsigned char* const header = data.background_sfx.list[id].data;
 
-	const Voice* const voices = reinterpret_cast<const Voice*>(&header[ReadAlignedSignedWord(header)]);
+	const auto voices_offset = ReadAlignedSignedWord(&header[0]);
+	const Voice* const voices =
+#ifdef SMPS_EnableUniversalVoiceBank
+		voices_offset == 0
+		? data.universal_voice_bank
+		:
+#endif
+		reinterpret_cast<const Voice*>(&header[voices_offset]);
+
 
 	const unsigned char tempo_divider = header[2];
 	const unsigned int total_tracks = header[3];
@@ -2240,7 +2244,7 @@ static void Sound_PlayCommand(const unsigned int id)
 									track.voice_control == 4 && special_fm4.IsPlaying() ? special_fm4 :
 								#endif
 									// TODO: Get rid of this cast.
-									static_cast<FMTrack&>(SFX_BGMChannelRAM(track.voice_control - 2));
+									static_cast<FMTrack&>(SFX_BGMChannelRAM(track.voice_control));
 
 								if (other_track.IsOverridden())
 								{
@@ -2260,7 +2264,7 @@ static void Sound_PlayCommand(const unsigned int id)
 								track.NoteOff();
 
 								// TODO: Get rid of this cast.
-								PSGMelodyTrack &other_track = static_cast<PSGMelodyTrack&>(SFX_BGMChannelRAM(track.voice_control >> 5));
+								PSGMelodyTrack &other_track = static_cast<PSGMelodyTrack&>(SFX_BGMChannelRAM(track.voice_control));
 
 								if (other_track.IsOverridden())
 								{
@@ -2286,8 +2290,7 @@ static void Sound_PlayCommand(const unsigned int id)
 								#ifdef SMPS_EnableSpecSFX
 									special_psg3.IsPlaying() ? special_psg3 :
 								#endif
-									// TODO: Get rid of this cast.
-									static_cast<PSG3MelodyTrack&>(SFX_BGMChannelRAM(track.voice_control >> 5));
+									state->tracks.music.PSG3();
 
 								if (other_track.IsOverridden())
 								{
@@ -2299,6 +2302,12 @@ static void Sound_PlayCommand(const unsigned int id)
 								}
 							}
 						},
+					#ifdef SMPS_EnablePSGNoiseDrums
+						[](PSGDrumTrack&)
+						{
+							std::unreachable();
+						},
+					#endif
 						[](DACTrack&, ClownMDSDK::MainCPU::Z80::Bus&)
 						{
 							std::unreachable();
@@ -2772,10 +2781,8 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 
 // TODO: Proper sign extension considering alternate integer sizes!
 // TODO: The packing of pointers in the track struct!
-// TODO: Move the music voice pointer back into the state struct so only SFX have it in their track RAM!
 // TODO: Check sign-ness of track values.
 // TODO: Check if variable accumulations need bitmasks.
-// TODO: Allow SFX to use universal voice bank too.
 // TODO: Clean-up 'IsPSG' calls.
 // TODO: Make IsPlaying and all that into proper 1-bit booleans.
 // TODO: Constants for DAC driver commands.
