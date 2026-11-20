@@ -515,21 +515,22 @@ namespace SMPS
 					}
 				);
 			}
+
+			void IterateNonMusicTracks(const auto &callback)
+			{
+				VisitNonMusicTracks(
+					[&callback](auto &non_music_tracks)
+					{
+						non_music_tracks.Iterate(callback);
+					}
+				);
+			}
 		} shared;
 
 		void IterateTracks(const auto &callback)
 		{
 			music_tracks.Iterate(callback);
-
-			shared.VisitNonMusicTracks(
-				[&callback](auto &non_music_tracks)
-				{
-					non_music_tracks.sfx.Iterate(callback);
-				#ifdef SMPS_EnableSpecSFX
-					non_music_tracks.special_sfx.Iterate(callback);
-				#endif
-				}
-			);
+			shared.IterateNonMusicTracks(callback);
 		}
 	};
 

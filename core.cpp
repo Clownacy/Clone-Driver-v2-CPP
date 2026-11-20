@@ -2781,16 +2781,11 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 
 	UpdateMusic();
 
-	state->shared.VisitNonMusicTracks(
-		[](auto &non_music_tracks)
+	state->shared.IterateNonMusicTracks(
+		[](auto &track)
 		{
-			non_music_tracks.Iterate(
-				[](auto &track)
-				{
-					if (track.IsPlaying())
-						track.UpdateTrack();
-				}
-			);
+			if (track.IsPlaying())
+				track.UpdateTrack();
 		}
 	);
 }
