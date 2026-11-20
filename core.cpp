@@ -1137,7 +1137,7 @@ bool DACTrack::DACDoNext()
 	return true;
 }
 
-void DACTrack::DACUpdateTrack()
+void DACTrack::UpdateTrack()
 {
 #ifdef SMPS_SoundTest
 	SetSoundTest(false);
@@ -1257,7 +1257,7 @@ void FMTrack::FMNoteOff()
 	);
 }
 
-void FMTrack::FMUpdateTrack()
+void FMTrack::UpdateTrack()
 {
 #ifdef SMPS_SoundTest
 	SetSoundTest(false);
@@ -1433,7 +1433,7 @@ void FMTrack::FMSetFreq(const unsigned char note)
 // PSG //
 /////////
 
-void PSGToneTrack::PSGUpdateTrack()
+void PSGToneTrack::UpdateTrack()
 {
 #ifdef SMPS_SoundTest
 	SetSoundTest(false);
@@ -1726,7 +1726,7 @@ bool PSGNoiseTrack::PSGNoiseDoNext()
 	return true;
 }
 
-void PSGNoiseTrack::PSGNoiseUpdateTrack()
+void PSGNoiseTrack::UpdateTrack()
 {
 #ifdef SMPS_SoundTest
 	SetSoundTest(false);
@@ -2477,20 +2477,14 @@ static void DoMusicTempoSpeedup()
 
 static void UpdateMusic()
 {
-	if (state->music_tracks.dac.IsPlaying())
-		state->music_tracks.dac.DACUpdateTrack();
+	state->music_tracks.Iterate(
+		[](auto &track)
+		{
+			if (track.IsPlaying())
+				track.UpdateTrack();
+		}
+	);
 
-	for (FMTrack &track : state->music_tracks.fm)
-		if (track.IsPlaying())
-			track.FMUpdateTrack();
-
-	for (PSGToneTrack &track : state->music_tracks.psg)
-		if (track.IsPlaying())
-			track.PSGUpdateTrack();
-#ifdef SMPS_EnablePSGNoiseDrums
-	if (state->music_tracks.psg_noise.IsPlaying())
-		state->music_tracks.psg_noise.PSGNoiseUpdateTrack();
-#endif
 	TempoWait();
 
 	// Do the speed-up that S&K's driver does in its music update function.
@@ -2790,21 +2784,13 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 	state->shared.VisitNonMusicTracks(
 		[](auto &non_music_tracks)
 		{
-			for (FMTrack &track : non_music_tracks.sfx.fm)
-				if (track.IsPlaying())
-					track.FMUpdateTrack();
-
-			for (PSGToneTrack &track : non_music_tracks.sfx.psg)
-				if (track.IsPlaying())
-					track.PSGUpdateTrack();
-
-		#ifdef SMPS_EnableSpecSFX
-			if (non_music_tracks.special_sfx.fm4.IsPlaying())
-				non_music_tracks.special_sfx.fm4.FMUpdateTrack();
-
-			if (non_music_tracks.special_sfx.psg3.IsPlaying())
-				non_music_tracks.special_sfx.psg3.PSGUpdateTrack();
-		#endif
+			non_music_tracks.Iterate(
+				[](auto &track)
+				{
+					if (track.IsPlaying())
+						track.UpdateTrack();
+				}
+			);
 		}
 	);
 }

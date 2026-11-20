@@ -15,7 +15,7 @@
 #define SMPS_PushSFXBehaviour
 #define SMPS_EnableContSFX
 #define SMPS_EnableUniversalVoiceBank
-//#define SMPS_EnablePSGNoiseDrums
+#define SMPS_EnablePSGNoiseDrums // TODO: Turn this back off.
 
 namespace SMPS
 {
@@ -171,7 +171,7 @@ namespace SMPS
 	{
 		void DACUpdateSample();
 		[[nodiscard]] bool DACDoNext();
-		void DACUpdateTrack();
+		void UpdateTrack();
 		void ApplyDACVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 	};
 
@@ -186,7 +186,7 @@ namespace SMPS
 		void SendFMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 		void FMNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 		void FMNoteOff();
-		void FMUpdateTrack();
+		void UpdateTrack();
 		[[nodiscard]] bool FMUpdateFreq();
 		[[nodiscard]] bool FMPrepareNote();
 		[[nodiscard]] bool FMDoNext();
@@ -220,13 +220,13 @@ namespace SMPS
 
 	struct PSGToneTrack : PSGTrack
 	{
-		void PSGUpdateTrack();
+		void UpdateTrack();
 	};
 
 #ifdef SMPS_EnablePSGNoiseDrums
 	struct PSGNoiseTrack : PSGTrack
 	{
-		void PSGNoiseUpdateTrack();
+		void UpdateTrack();
 		[[nodiscard]] bool PSGNoiseDoNext();
 		void PSGNoiseSetDrumNote(unsigned char note);
 	};
