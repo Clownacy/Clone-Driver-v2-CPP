@@ -26,41 +26,35 @@ namespace SMPS
 	template<typename... Ts>
 	VisitHelper(Ts...) -> VisitHelper<Ts...>;
 
-	// TODO: Make this wrap the bus class, so that WriteFMIOrII can only be used with this!
-	inline auto LockZ80BusFMSafe(const auto &callback)
+	class Z80BusFMSafe : public ClownMDSDK::MainCPU::Z80::Bus
 	{
-		return ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
-			[&](ClownMDSDK::MainCPU::Z80::Bus &bus)
-			{
-				class FMRestorer
+	public:
+		using ClownMDSDK::MainCPU::Z80::Bus::Bus;
+
+	#ifdef __MEGA_DRIVE__
+		~Z80BusFMSafe()
+		{
+			WaitUntilFMReady();
+
+			asm(
+				"move.b	#0x2A,%0"
+				: "=Qm" (ClownMDSDK::MainCPU::FM::Unsafe::a0)
+			);
+		}
+	#endif
+
+		static decltype(auto) Lock(const auto &callback, const bool wait_for_bus = true)
+		{
+			return ClownMDSDK::MainCPU::M68k::DisableInterruptsTemporarily(
+				[&]()
 				{
-				private:
-					ClownMDSDK::MainCPU::Z80::Bus &bus;
+					Z80BusFMSafe z80_bus(wait_for_bus);
 
-				public:
-					FMRestorer(ClownMDSDK::MainCPU::Z80::Bus &bus)
-						: bus(bus)
-					{}
-
-			#ifdef __MEGA_DRIVE__
-					~FMRestorer()
-					{
-						bus.WaitUntilFMReady();
-
-						asm(
-							"move.b	#0x2A,%0"
-							: "=Qm" (ClownMDSDK::MainCPU::FM::Unsafe::a0)
-						);
-					}
-			#endif
-				};
-
-				FMRestorer fm_restorer(bus);
-
-				return callback(bus);
-			}
-		);
-	}
+					return callback(z80_bus);
+				}
+			);
+		}
+	};
 
 	using Voice = std::array<unsigned char, 25>;
 
@@ -181,7 +175,7 @@ namespace SMPS
 	{
 		unsigned char ams_fms_pan;
 
-		void WriteFMIorII(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, unsigned char port, unsigned char value);
+		void WriteFMIorII(Z80BusFMSafe &z80_bus, unsigned char port, unsigned char value);
 	};
 
 	struct DACTrack : YM2612Track
@@ -196,12 +190,12 @@ namespace SMPS
 	{
 		const Voice* GetVoices();
 		const Voice& GetVoice(const unsigned int index) { return GetVoices()[index]; }
-		void SendVoiceTLCommon(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const Voice &voice, bool force_upload);
-		void SendVoiceTL(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void SetVoice(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void SilenceChannel(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void SendNoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
-		void NoteOff(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+		void SendVoiceTLCommon(Z80BusFMSafe &z80_bus, const Voice &voice, bool force_upload);
+		void SendVoiceTL(Z80BusFMSafe &z80_bus);
+		void SetVoice(Z80BusFMSafe &z80_bus);
+		void SilenceChannel(Z80BusFMSafe &z80_bus);
+		void SendNoteOff(Z80BusFMSafe &z80_bus);
+		void NoteOff(Z80BusFMSafe &z80_bus);
 		void NoteOff();
 		void UpdateTrackInternal(bool begin_new_note);
 		[[nodiscard]] bool UpdateFreq();
@@ -380,8 +374,8 @@ namespace SMPS
 
 			void IterateWithZ80Bus(this auto &self, const auto &callback)
 			{
-				LockZ80BusFMSafe(
-					[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+				Z80BusFMSafe::Lock(
+					[&](Z80BusFMSafe &z80_bus)
 					{
 						self.Iterate(VisitHelper(
 							[&callback, &z80_bus](DACTrack &track)
