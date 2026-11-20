@@ -1425,7 +1425,7 @@ void FMTrack::FMSetFreq(const unsigned char note)
 // PSG //
 /////////
 
-void PSGToneTrack::UpdateTrackInternal(const bool begin_new_note)
+void PSGMelodyTrack::UpdateTrackInternal(const bool begin_new_note)
 {
 	if (begin_new_note)
 	{
@@ -1657,7 +1657,7 @@ void PSGTrack::PSGNoteOff()
 ////////////////////
 
 #ifdef SMPS_EnablePSGNoiseDrums
-void PSGNoiseTrack::PSGNoiseSetDrumNote(const unsigned char note)
+void PSGDrumTrack::PSGNoiseSetDrumNote(const unsigned char note)
 {
 	if (note < 0x81)
 	{
@@ -1680,7 +1680,7 @@ void PSGNoiseTrack::PSGNoiseSetDrumNote(const unsigned char note)
 	ClownMDSDK::MainCPU::PSG::Write(drum.noise_mode);
 }
 
-bool PSGNoiseTrack::PSGNoiseDoNext()
+bool PSGDrumTrack::PSGNoiseDoNext()
 {
 	const auto note_or_duration = GetNoteOrDuration();
 
@@ -1714,7 +1714,7 @@ bool PSGNoiseTrack::PSGNoiseDoNext()
 	return true;
 }
 
-void PSGNoiseTrack::UpdateTrackInternal(const bool begin_new_note)
+void PSGDrumTrack::UpdateTrackInternal(const bool begin_new_note)
 {
 	if (begin_new_note)
 	{
