@@ -487,7 +487,7 @@ bool Track::CoordFlag(const unsigned int flag)
 			const unsigned char value = *data_pointer++;
 
 			state->music_tracks.Iterate(
-				[&](Track &track)
+				[&value](Track &track)
 				{
 					track.tempo_divider = value;
 				}
@@ -2530,60 +2530,42 @@ static void DoFadeIn()
 	LockZ80BusFMSafe(
 		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			DACTrack &dac_track = state->music_tracks.dac;
-
-			if (dac_track.IsPlaying())
-				dac_track.ApplyDACVolumeAttenuation(z80_bus);
-
-			const auto DoFM = [&](FMTrack &track)
-			{
-				if (track.IsPlaying())
-					track.SendVoiceTL(z80_bus);
-			};
-
-			for (FMTrack &track : state->music_tracks.fm)
-				DoFM(track);
-
-			state->shared.VisitNonMusicTracks(
-				[&DoFM](auto &non_music_tracks)
+			state->IterateTracks(VisitHelper(
+				[&z80_bus](DACTrack &track)
 				{
-					for (FMTrack &track : non_music_tracks.sfx.fm)
-						DoFM(track);
-				#ifdef SMPS_EnableSpecSFX
-					DoFM(non_music_tracks.special_sfx.fm4);
-				#endif
-				}
-			);
+					if (track.IsPlaying())
+						track.ApplyDACVolumeAttenuation(z80_bus);
+				},
+				[&z80_bus](FMTrack &track)
+				{
+					if (track.IsPlaying())
+						track.SendVoiceTL(z80_bus);
+				},
+			#ifdef SMPS_EnablePWM
+				[](PWMTrack&) {},
+			#endif
+				[](PSGTrack&) {}
+			));
 		}
 	);
 
-	const auto DoPSG = [&](PSGTrack &track)
-	{
-		if (track.IsPlaying())
+	state->IterateTracks(VisitHelper(
+		[](PSGTrack &track)
 		{
-			// If a volume envelope is active, then it will handle updating the volume for us.
-			// Doing it manually will just conflict with it.
-			if (track.voice_index == 0)
-				track.SetPSGVolumeAttenuation(track.volume_attenuation);
-		}
-	};
-
-	for (PSGTrack &track : state->music_tracks.psg)
-		DoPSG(track);
-#ifdef SMPS_EnablePSGNoiseDrums
-	DoPSG(state->music_tracks.psg_noise);
-#endif
-
-	state->shared.VisitNonMusicTracks(
-		[&DoPSG](auto &non_music_tracks)
-		{
-			for (PSGTrack &track : non_music_tracks.sfx.psg)
-				DoPSG(track);
-		#ifdef SMPS_EnableSpecSFX
-			DoPSG(non_music_tracks.special_sfx.psg3);
-		#endif
-		}
-	);
+			if (track.IsPlaying())
+			{
+				// If a volume envelope is active, then it will handle updating the volume for us.
+				// Doing it manually will just conflict with it.
+				if (track.voice_index == 0)
+					track.SetPSGVolumeAttenuation(track.volume_attenuation);
+			}
+		},
+	#ifdef SMPS_EnablePWM
+		[](PWMTrack&) {},
+	#endif
+		[](DACTrack&) {},
+		[](FMTrack&) {}
+	));
 }
 
 static void DoFadeOut()
@@ -2683,36 +2665,28 @@ static void HandlePause()
 	}
 	else
 	{
-		const auto RestoreFMTrackVoice = [](ClownMDSDK::MainCPU::Z80::Bus &z80_bus, FMTrack &track)
-		{
-			if (track.IsPlaying() && !track.IsOverridden())
-				track.SetVoice(z80_bus);
-		};
-
 		state->pause = 0;
 
 		LockZ80BusFMSafe(
 			[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 			{
-				for (FMTrack &track : state->music_tracks.fm)
-					RestoreFMTrackVoice(z80_bus, track);
-
-				state->shared.VisitNonMusicTracks(
-					[&RestoreFMTrackVoice, &z80_bus](auto &non_music_tracks)
+				state->IterateTracks(VisitHelper(
+					[&z80_bus](DACTrack &track)
 					{
-						for (FMTrack &track : non_music_tracks.sfx.fm)
-							RestoreFMTrackVoice(z80_bus, track);
-
-					#ifdef SMPS_EnableSpecSFX
-						RestoreFMTrackVoice(z80_bus, non_music_tracks.special_sfx.fm4);
-					#endif
-					}
-				);
-
-				// Apply DAC panning if necessary (RestoreFMTrackVoice already reapplied FM6's panning).
-				auto &dac_track = state->music_tracks.dac;
-				if (dac_track.IsPlaying() && !dac_track.IsOverridden() && !dac_track.IsFM6Overridden())
-					z80_bus.WriteFMII(0xB6, dac_track.ams_fms_pan);
+						// Apply DAC panning if necessary.
+						if (track.IsPlaying() && !track.IsOverridden() && !track.IsFM6Overridden())
+							z80_bus.WriteFMII(0xB6, track.ams_fms_pan);
+					},
+					[&z80_bus](FMTrack &track)
+					{
+						if (track.IsPlaying() && !track.IsOverridden())
+							track.SetVoice(z80_bus);
+					},
+				#ifdef SMPS_EnablePWM
+					[](PWMTrack&) {},
+				#endif
+					[](PSGTrack&) {}
+				));
 
 #ifdef __MEGA_DRIVE__
 				z80_bus.RAM(zRequestFlag) = z80_scf_instruction;
