@@ -156,7 +156,7 @@ namespace SMPS
 	#endif
 
 		template<typename... Ts>
-		auto Visit(Ts &&...visitors);
+		decltype(auto) Visit(Ts &&...visitors);
 	};
 
 	struct YM2612Track : Track
@@ -176,8 +176,8 @@ namespace SMPS
 
 	struct FMTrack : YM2612Track
 	{
-		const Voice *voice_ptr;
-
+		const Voice* GetVoices();
+		const Voice& GetVoice(const unsigned int index) { return GetVoices()[index]; }
 		void SendVoiceTLCommon(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const Voice &voice, bool force_upload);
 		void SendVoiceTL(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
 		void SetVoice(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
@@ -191,6 +191,14 @@ namespace SMPS
 		[[nodiscard]] bool FMDoNext();
 		void FMNoteOn();
 		void FMSetFreq(unsigned char note);
+	};
+
+	struct FMMusicTrack : FMTrack
+	{};
+
+	struct FMSFXTrack : FMTrack
+	{
+		const Voice *voice_ptr;
 	};
 
 	struct PSGTrack : Track
@@ -224,7 +232,7 @@ namespace SMPS
 #endif
 
 	template<typename... Ts>
-	inline auto Track::Visit(Ts &&...visitors)
+	inline decltype(auto) Track::Visit(Ts &&...visitors)
 	{
 		auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
 
@@ -236,8 +244,10 @@ namespace SMPS
 		else if (IsPWM())
 			return visitor(static_cast<PWMTrack&>(*this));
 #endif
+		else if (IsMusic())
+			return visitor(static_cast<FMMusicTrack&>(*this));
 		else
-			return visitor(static_cast<FMTrack&>(*this));
+			return visitor(static_cast<FMSFXTrack&>(*this));
 	}
 
 	//};
@@ -257,6 +267,7 @@ namespace SMPS
 	struct Variables
 	{
 		Queue queue;
+		const Voice *voice_ptr;
 		unsigned char sndprio;
 		unsigned char main_tempo_timeout;
 		unsigned char main_tempo;
@@ -289,18 +300,18 @@ namespace SMPS
 		struct MusicTracks
 		{
 			DACTrack dac;
-			std::array<FMTrack, 6> fm;
+			std::array<FMMusicTrack, 6> fm;
 			std::array<PSGTrack, 3> psg;
 		#ifdef SMPS_EnablePSGNoiseDrums
 			PSGTrack psg_noise;
 		#endif
 
-			FMTrack& FM1()  { return fm[0]; }
-			FMTrack& FM2()  { return fm[1]; }
-			FMTrack& FM3()  { return fm[2]; }
-			FMTrack& FM4()  { return fm[3]; }
-			FMTrack& FM5()  { return fm[4]; }
-			FMTrack& FM6()  { return fm[5]; }
+			FMMusicTrack& FM1()  { return fm[0]; }
+			FMMusicTrack& FM2()  { return fm[1]; }
+			FMMusicTrack& FM3()  { return fm[2]; }
+			FMMusicTrack& FM4()  { return fm[3]; }
+			FMMusicTrack& FM5()  { return fm[4]; }
+			FMMusicTrack& FM6()  { return fm[5]; }
 			PSGTrack& PSG1() { return psg[0]; }
 			PSGTrack& PSG2() { return psg[1]; }
 			PSGTrack& PSG3() { return psg[2]; }
@@ -333,12 +344,12 @@ namespace SMPS
 			{
 				struct
 				{
-					std::array<FMTrack, 3> fm;
+					std::array<FMSFXTrack, 3> fm;
 					std::array<PSGTrack, 3> psg;
 
-					FMTrack& FM3()  { return fm[0]; }
-					FMTrack& FM4()  { return fm[1]; }
-					FMTrack& FM5()  { return fm[2]; }
+					FMSFXTrack& FM3()  { return fm[0]; }
+					FMSFXTrack& FM4()  { return fm[1]; }
+					FMSFXTrack& FM5()  { return fm[2]; }
 					PSGTrack& PSG1() { return psg[0]; }
 					PSGTrack& PSG2() { return psg[1]; }
 					PSGTrack& PSG3() { return psg[2]; }
@@ -355,7 +366,7 @@ namespace SMPS
 			#ifdef SMPS_EnableSpecSFX
 				struct
 				{
-					FMTrack fm4;
+					FMSFXTrack fm4;
 					PSGTrack psg3;
 
 					void Iterate(const auto &callback)
@@ -428,7 +439,7 @@ namespace SMPS
 					{
 						callback(non_music_tracks);
 					},
-					[](auto&) {}
+					[](MusicBackup&) {}
 				);
 			}
 
@@ -439,7 +450,7 @@ namespace SMPS
 					{
 						return non_music_tracks;
 					},
-					[](auto&) -> NonMusicTracks&
+					[](MusicBackup&) -> NonMusicTracks&
 					{
 						std::unreachable();
 					}
@@ -453,7 +464,7 @@ namespace SMPS
 					{
 						return music_backup;
 					},
-					[](auto&) -> MusicBackup&
+					[](NonMusicTracks&) -> MusicBackup&
 					{
 						std::unreachable();
 					}

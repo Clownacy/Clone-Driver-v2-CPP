@@ -312,7 +312,11 @@ void Track::FinishTrackUpdate()
 		{
 			track.vol_env_index = 0;
 		},
-		[](auto&) {}
+	#ifdef SMPS_EnablePWM
+		[](PWMTrack&) {},
+	#endif
+		[](DACTrack&) {},
+		[](FMTrack&) {}
 	);
 
 #ifdef SMPS_EnableModulationEnvelopes
@@ -363,7 +367,10 @@ bool Track::CoordFlag(const unsigned int flag)
 						}
 					);
 				},
-				[]<typename T>(T&) {}
+			#ifdef SMPS_EnablePWM
+				[](PWMTrack&) {},
+			#endif
+				[](PSGTrack&) {}
 			);
 
 			break;
@@ -453,7 +460,11 @@ bool Track::CoordFlag(const unsigned int flag)
 						}
 					);
 				},
-				[](auto&) {}
+			#ifdef SMPS_EnablePWM
+				[](PWMTrack&) {},
+			#endif
+				[](DACTrack&) {},
+				[](PSGTrack&) {}
 			);
 
 			return false;
@@ -506,7 +517,11 @@ bool Track::CoordFlag(const unsigned int flag)
 						}
 					);
 				},
-				[](auto &) {}
+			#ifdef SMPS_EnablePWM
+				[](PWMTrack&) {},
+			#endif
+				[](DACTrack&) {},
+				[](PSGTrack&) {}
 			);
 
 			break;
@@ -531,7 +546,11 @@ bool Track::CoordFlag(const unsigned int flag)
 						}
 					);
 				},
-				[](auto&) {}
+			#ifdef SMPS_EnablePWM
+				[](PWMTrack&) {},
+			#endif
+				[](DACTrack&) {},
+				[](PSGTrack&) {}
 			);
 			[[fallthrough]];
 #ifndef SMPS_EnableSpecSFX
@@ -551,7 +570,10 @@ bool Track::CoordFlag(const unsigned int flag)
 				{
 					track.PSGNoteOff();
 				},
-				[](auto&) {}
+			#ifdef SMPS_EnablePWM
+				[](PWMTrack&) {},
+			#endif
+				[](DACTrack&) {}
 			);
 
 			if (IsMusic())
@@ -611,7 +633,10 @@ bool Track::CoordFlag(const unsigned int flag)
 					if (other_track->voice_control == 0xE0)
 						ClownMDSDK::MainCPU::PSG::Write(other_track->psg_noise);
 				},
-				[](auto&) {}
+			#ifdef SMPS_EnablePWM
+				[](PWMTrack&) {},
+			#endif
+				[](DACTrack&) {}
 			);
 
 			return false;
@@ -634,7 +659,11 @@ bool Track::CoordFlag(const unsigned int flag)
 					if (!track.IsOverridden())
 						ClownMDSDK::MainCPU::PSG::Write(value);
 				},
-				[](auto&) {}
+			#ifdef SMPS_EnablePWM
+				[](PWMTrack&) {},
+			#endif
+				[](DACTrack&) {},
+				[](FMTrack&) {}
 			);
 
 			break;
@@ -697,7 +726,10 @@ bool Track::CoordFlag(const unsigned int flag)
 						}
 					);
 				},
-				[](auto&) {}
+			#ifdef SMPS_EnablePWM
+				[](PWMTrack&) {},
+			#endif
+				[](PSGTrack&) {}
 			);
 			data_pointer += 2;
 			break;
@@ -836,7 +868,10 @@ bool Track::NoteTimeoutUpdate()
 		{
 			track.PSGNoteOff();
 		},
-		[](auto&) {}
+	#ifdef SMPS_EnablePWM
+		[](PWMTrack&) {},
+	#endif
+		[](DACTrack&) {}
 	);
 
 	return false;
@@ -926,7 +961,10 @@ std::optional<unsigned int> Track::DoModulationEnvelope()
 						{
 							track.PSGNoteOff();
 						},
-						[](auto&) {}
+					#ifdef SMPS_EnablePWM
+						[](PWMTrack&) {},
+					#endif
+						[](DACTrack&) {}
 					);
 
 					return std::nullopt;
@@ -1118,6 +1156,25 @@ void DACTrack::ApplyDACVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 // FM //
 ////////
 
+const Voice* FMTrack::GetVoices()
+{
+	return Visit(
+		[](FMMusicTrack&) -> const Voice*
+		{
+			return state->variables.voice_ptr;
+		},
+		[](FMSFXTrack &track) -> const Voice*
+		{
+			return track.voice_ptr;
+		},
+	#ifdef SMPS_EnablePWM
+		[](PWMTrack&) -> const Voice* { std::unreachable(); },
+	#endif
+		[](DACTrack&) -> const Voice* { std::unreachable(); },
+		[](PSGTrack&) -> const Voice* { std::unreachable(); }
+	);
+}
+
 void FMTrack::SendVoiceTLCommon(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const Voice &voice, const bool force_upload)
 {
 	const unsigned int base_volume = std::min(0x7FU, volume_attenuation + static_cast<unsigned int>(state->variables.fadein_counter) * 2);
@@ -1136,12 +1193,12 @@ void FMTrack::SendVoiceTL(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 	if (IsOverridden())
 		return;
 
-	SendVoiceTLCommon(z80_bus, voice_ptr[voice_index], false);
+	SendVoiceTLCommon(z80_bus, GetVoice(voice_index), false);
 }
 
 void FMTrack::SetVoice(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 {
-	const Voice &voice = voice_ptr[voice_index];
+	const Voice &voice = GetVoice(voice_index);
 
 	WriteFMIorII(z80_bus, 0xB0, voice[0]);
 
@@ -1780,7 +1837,7 @@ static void Sound_PlayBGM(const unsigned int id)
 		state->variables.ignore_speedup = true;
 
 	const auto voice_offset = ReadAlignedSignedWord(&header[0]);
-	const Voice* const voices =
+	state->variables.voice_ptr =
 #ifdef SMPS_EnableUniversalVoiceBank
 		voice_offset == 0
 		? data.universal_voice_bank
@@ -1816,18 +1873,12 @@ static void Sound_PlayBGM(const unsigned int id)
 		track_header += 4;
 	};
 
-	const auto &DoFM = [&](FMTrack &track)
-	{
-		DoDACOrFM(track);
-		track.voice_ptr = voices;
-	};
-
 	for (unsigned int i = 0; i < total_dac_and_fm_tracks; ++i)
 	{
 		if (i == 0)
 			DoDACOrFM(state->music_tracks.dac);
 		else
-			DoFM(state->music_tracks.fm[i - 1]);
+			DoDACOrFM(state->music_tracks.fm[i - 1]);
 	}
 
 	state->music_tracks.dac.SetFM6Overridden(true);
@@ -2033,12 +2084,19 @@ static void Sound_PlaySFX(const unsigned int id)
 			{
 				dac_track.ams_fms_pan = 0xC0;
 			},
-			[&voices](FMTrack &fm_track)
+			[&voices](FMSFXTrack &fm_track)
 			{
 				fm_track.ams_fms_pan = 0xC0;
 				fm_track.voice_ptr = voices;
 			},
-			[](auto&) {}
+			[&voices](FMMusicTrack&)
+			{
+				std::unreachable();
+			},
+		#ifdef SMPS_EnablePWM
+			[](PWMTrack&) {},
+		#endif
+			[](PSGTrack&) {}
 		);
 
 		track_header += 6;
@@ -2107,12 +2165,20 @@ static void Sound_PlaySpecial(const unsigned int id)
 			{
 				dac_track.ams_fms_pan = 0xC0;
 			},
-			[&voices](FMTrack &fm_track)
+			[&voices](FMSFXTrack &fm_track)
 			{
 				fm_track.ams_fms_pan = 0xC0;
 				fm_track.voice_ptr = voices;
 			},
-			[](auto&) {}
+			[&voices](FMMusicTrack&)
+			{
+				std::unreachable();
+			},
+		#ifdef SMPS_EnablePWM
+			[](PWMTrack&) {},
+		#endif
+			[](PSGTrack&) {}
+
 		);
 
 		track_header += 6;
@@ -2298,7 +2364,7 @@ static void Sound_PlayCommand(const unsigned int id)
 					music_backup.variables.main_tempo = music_backup.variables.speeduptempo;
 					music_backup.variables.speedup = true;
 				},
-				[](auto&)
+				[](State::Shared::NonMusicTracks&)
 				{
 					state->variables.main_tempo = state->variables.speeduptempo;
 					state->variables.speedup = true;
@@ -2314,7 +2380,7 @@ static void Sound_PlayCommand(const unsigned int id)
 					music_backup.variables.main_tempo = music_backup.variables.tempo_mod;
 					music_backup.variables.speedup = false;
 				},
-				[](auto&)
+				[](State::Shared::NonMusicTracks&)
 				{
 					state->variables.main_tempo = state->variables.speeduptempo;
 					state->variables.speedup = false;
