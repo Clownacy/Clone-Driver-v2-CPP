@@ -26,6 +26,7 @@ namespace SMPS
 	template<typename... Ts>
 	VisitHelper(Ts...) -> VisitHelper<Ts...>;
 
+	// TODO: Make this wrap the bus class, so that WriteFMIOrII can only be used with this!
 	inline auto LockZ80BusFMSafe(const auto &callback)
 	{
 		return ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(

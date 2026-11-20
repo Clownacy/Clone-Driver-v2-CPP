@@ -586,60 +586,56 @@ bool Track::CoordFlag(const unsigned int flag)
 			Visit(
 				[&non_music_tracks](FMTrack &track)
 				{
-					FMTrack *other_track;
 				#ifdef SMPS_EnableSpecSFX
 					auto &special_fm4 = non_music_tracks.special_sfx.fm4;
-
-					if (track.voice_control == 4 && special_fm4.IsPlaying())
-					{
-						other_track = &special_fm4;
-					}
-					else
 				#endif
-					{
+
+					FMTrack &other_track =
+					#ifdef SMPS_EnableSpecSFX
+						track.voice_control == 4 && special_fm4.IsPlaying() ? special_fm4 :
+					#endif
 						// TODO: Get rid of this dumb cast.
-						other_track = static_cast<FMTrack*>(&SFX_BGMChannelRAM(track.voice_control - 2));
+						static_cast<FMTrack&>(SFX_BGMChannelRAM(track.voice_control - 2));
 
-						if (!other_track->IsPlaying())
-							return;
-					}
+					if (!other_track.IsPlaying())
+						return;
 
-					other_track->SetOverridden(false);
-					other_track->SetResting(true);
+					other_track.SetOverridden(false);
+					other_track.SetResting(true);
 
 					LockZ80BusFMSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
-							other_track->SetVoice(z80_bus);
+							other_track.SetVoice(z80_bus);
 						}
 					);
 				},
 				[&non_music_tracks](PSGTrack &track)
 				{
 					// TODO: Get rid of this dumb cast.
-					PSGTrack *other_track = static_cast<PSGTrack*>(&SFX_BGMChannelRAM(track.voice_control >> 5)); // TODO: Cast to unsigned integer?
+					PSGTrack &other_track = static_cast<PSGTrack&>(SFX_BGMChannelRAM(track.voice_control >> 5)); // TODO: Cast to unsigned integer?
 
-					other_track->SetOverridden(false);
-					other_track->SetResting(true);
+					other_track.SetOverridden(false);
+					other_track.SetResting(true);
 				},
 				[&non_music_tracks](PSG3MelodyTrack &track)
 				{
-					PSG3MelodyTrack *other_track;
 				#ifdef SMPS_EnableSpecSFX
 					auto &special_psg3 = non_music_tracks.special_sfx.psg3;
-
-					if ((track.voice_control == 0xC0 || track.voice_control == 0xE0) && special_psg3.IsPlaying())
-						other_track = &special_psg3;
-					else
 				#endif
+
+					PSG3MelodyTrack &other_track =
+					#ifdef SMPS_EnableSpecSFX
+						special_psg3.IsPlaying() ? special_psg3 :
+					#endif
 						// TODO: Get rid of this dumb cast.
-						other_track = static_cast<PSG3MelodyTrack*>(&SFX_BGMChannelRAM(track.voice_control >> 5)); // TODO: Cast to unsigned integer?
+						static_cast<PSG3MelodyTrack&>(SFX_BGMChannelRAM(track.voice_control >> 5)); // TODO: Cast to unsigned integer?
 
-					other_track->SetOverridden(false);
-					other_track->SetResting(true);
+					other_track.SetOverridden(false);
+					other_track.SetResting(true);
 
-					if (other_track->voice_control == 0xE0)
-						ClownMDSDK::MainCPU::PSG::Write(other_track->psg_noise);
+					if (other_track.voice_control == 0xE0)
+						ClownMDSDK::MainCPU::PSG::Write(other_track.psg_noise);
 				},
 			#ifdef SMPS_EnablePWM
 				[](PWMTrack&) {},
@@ -764,7 +760,7 @@ bool Track::CoordFlag(const unsigned int flag)
 				{
 					track.volume_attenuation = value & 0x7F;
 
-					LockZ80BusFMSafe(
+					ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
 						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
 							track.ApplyVolumeAttenuation(z80_bus);
@@ -1657,7 +1653,7 @@ void PSGTrack::SendNoteOff()
 	ClownMDSDK::MainCPU::PSG::Write(voice_control | 0x1F);
 
 	if (voice_control == 0xC0)
-		ClownMDSDK::MainCPU::PSG::Write(0xFF);
+		ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F); // Silence noise channel.
 }
 
 void PSGTrack::NoteOff()
@@ -2241,12 +2237,13 @@ static void Sound_PlayCommand(const unsigned int id)
 
 									track.NoteOff(z80_bus);
 
-									FMTrack &other_track =
+								#ifdef SMPS_EnableSpecSFX
+									auto &special_fm4 = non_music_tracks.special_sfx.fm4;
+								#endif
 
+									FMTrack &other_track =
 									#ifdef SMPS_EnableSpecSFX
-										track.voice_control == 4 && non_music_tracks.special_sfx.fm4.IsPlaying()
-										? non_music_tracks.special_sfx.fm4
-										:
+										track.voice_control == 4 && special_fm4.IsPlaying() ? special_fm4 :
 									#endif
 										// TODO: Get rid of this cast.
 										static_cast<FMTrack&>(SFX_BGMChannelRAM(track.voice_control - 2));
@@ -2291,12 +2288,13 @@ static void Sound_PlayCommand(const unsigned int id)
 
 								track.NoteOff();
 
-								PSG3MelodyTrack &other_track =
+							#ifdef SMPS_EnableSpecSFX
+								auto &special_psg3 = non_music_tracks.special_sfx.psg3;
+							#endif
 
+								PSG3MelodyTrack &other_track =
 								#ifdef SMPS_EnableSpecSFX
-									(track.voice_control == 0xC0 || track.voice_control == 0xE0) && non_music_tracks.special_sfx.psg3.IsPlaying()
-									? non_music_tracks.special_sfx.psg3
-									:
+									special_psg3.IsPlaying() ? special_psg3 :
 								#endif
 									// TODO: Get rid of this cast.
 									static_cast<PSG3MelodyTrack&>(SFX_BGMChannelRAM(track.voice_control >> 5));
