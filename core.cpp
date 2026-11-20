@@ -995,6 +995,11 @@ bool Track::IsMusic() const
 	return static_cast<const void*>(this) < static_cast<const void*>(&state->shared);
 }
 
+bool Track::IsPSGNoise() const
+{
+	return this == &state->music_tracks.psg_noise;
+}
+
 void Track::ReloadModulationData()
 {
 	modulation = *modulation_ptr;
@@ -1428,7 +1433,7 @@ void FMTrack::FMSetFreq(const unsigned char note)
 // PSG //
 /////////
 
-void PSGTrack::PSGUpdateTrack()
+void PSGToneTrack::PSGUpdateTrack()
 {
 #ifdef SMPS_SoundTest
 	SetSoundTest(false);
@@ -1664,7 +1669,7 @@ void PSGTrack::PSGNoteOff()
 ////////////////////
 
 #ifdef SMPS_EnablePSGNoiseDrums
-void PSGTrack::PSGNoiseSetDrumNote(const unsigned char note)
+void PSGNoiseTrack::PSGNoiseSetDrumNote(const unsigned char note)
 {
 	if (note < 0x81)
 	{
@@ -1687,7 +1692,7 @@ void PSGTrack::PSGNoiseSetDrumNote(const unsigned char note)
 	ClownMDSDK::MainCPU::PSG::Write(drum.noise_mode);
 }
 
-bool PSGTrack::PSGNoiseDoNext()
+bool PSGNoiseTrack::PSGNoiseDoNext()
 {
 	const auto note_or_duration = GetNoteOrDuration();
 
@@ -1721,7 +1726,7 @@ bool PSGTrack::PSGNoiseDoNext()
 	return true;
 }
 
-void PSGTrack::PSGNoiseUpdateTrack()
+void PSGNoiseTrack::PSGNoiseUpdateTrack()
 {
 #ifdef SMPS_SoundTest
 	SetSoundTest(false);
@@ -2479,7 +2484,7 @@ static void UpdateMusic()
 		if (track.IsPlaying())
 			track.FMUpdateTrack();
 
-	for (PSGTrack &track : state->music_tracks.psg)
+	for (PSGToneTrack &track : state->music_tracks.psg)
 		if (track.IsPlaying())
 			track.PSGUpdateTrack();
 #ifdef SMPS_EnablePSGNoiseDrums
@@ -2789,7 +2794,7 @@ STARTING_FUNCTION void SMPS::UpdateDriver()
 				if (track.IsPlaying())
 					track.FMUpdateTrack();
 
-			for (PSGTrack &track : non_music_tracks.sfx.psg)
+			for (PSGToneTrack &track : non_music_tracks.sfx.psg)
 				if (track.IsPlaying())
 					track.PSGUpdateTrack();
 
