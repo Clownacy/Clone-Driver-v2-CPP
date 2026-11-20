@@ -13,62 +13,62 @@ STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, c
 	const auto &TrackMap = [](unsigned int index) -> Track*
 	{
 		if (index == 0)
-			return &state->music_tracks.dac;
+			return &state->tracks.music.dac;
 
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.FM1();
+			return &state->tracks.music.FM1();
 
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.FM2();
+			return &state->tracks.music.FM2();
 
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.FM3();
+			return &state->tracks.music.FM3();
 
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.FM4();
+			return &state->tracks.music.FM4();
 
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.FM5();
+			return &state->tracks.music.FM5();
 
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.FM6();
+			return &state->tracks.music.FM6();
 
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.PSG1();
+			return &state->tracks.music.PSG1();
 
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.PSG2();
+			return &state->tracks.music.PSG2();
 
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.PSG3();
+			return &state->tracks.music.PSG3();
 
 	#ifdef SMPS_EnablePSGNoiseDrums
 		--index;
 
 		if (index == 0)
-			return &state->music_tracks.psg_drum;
+			return &state->tracks.music.psg_drum;
 	#endif
 
-		return state->shared.Visit(
-			[&](State::Shared::NonMusicTracks &other_tracks) -> Track*
+		return state->tracks.shared.Visit(
+			[&](State::Tracks::Shared::NonMusicTracks &other_tracks) -> Track*
 			{
 				--index;
 
@@ -137,7 +137,7 @@ STARTING_FUNCTION unsigned int SMPS::GetTrackNote(const unsigned int track_id, c
 
 	const unsigned int note = [&]() -> unsigned int
 	{
-		if (track == &state->music_tracks.dac)
+		if (track == &state->tracks.music.dac)
 		{
 			// DAC
 			const auto z80_sample_address = []()

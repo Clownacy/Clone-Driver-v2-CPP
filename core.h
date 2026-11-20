@@ -366,239 +366,242 @@ namespace SMPS
 
 		unsigned char music_tempo_modifier, music_tempo_modifier_master;
 
-		struct TrackCollection
+		struct Tracks
 		{
-			void Update(this auto &self)
+			struct TrackCollection
 			{
-				self.Iterate(
-					[](auto &track)
-					{
-						track.UpdateTrack();
-					}
-				);
-			}
-		};
-
-		struct MusicTracks : TrackCollection
-		{
-			DACTrack dac;
-			std::array<FMMusicTrack, 6> fm;
-			PSGMelodyTrack psg1;
-			PSGMelodyTrack psg2;
-			PSG3MelodyTrack psg3;
-		#ifdef SMPS_EnablePSGNoiseDrums
-			PSGDrumTrack psg_drum;
-		#endif
-
-			auto& FM1()  { return fm[0]; }
-			auto& FM2()  { return fm[1]; }
-			auto& FM3()  { return fm[2]; }
-			auto& FM4()  { return fm[3]; }
-			auto& FM5()  { return fm[4]; }
-			auto& FM6()  { return fm[5]; }
-			auto& PSG1() { return psg1; }
-			auto& PSG2() { return psg2; }
-			auto& PSG3() { return psg3; }
-			Track& PSG(const unsigned int index)
-			{
-				switch (index)
+				void Update(this auto &self)
 				{
-					case 0:
-						return psg1;
-					case 1:
-						return psg2;
-					case 2:
-						return psg3;
+					self.Iterate(
+						[](auto &track)
+						{
+							track.UpdateTrack();
+						}
+					);
 				}
-
-				std::unreachable();
-			}
-
-			void Iterate(const auto &callback)
-			{
-				callback(dac);
-				for (auto &track : fm)
-					callback(track);
-				callback(psg1);
-				callback(psg2);
-				callback(psg3);
-			#ifdef SMPS_EnablePSGNoiseDrums
-				callback(psg_drum);
-			#endif
-			}
-
-			// TODO: Add a 'clear' method?
-		} music_tracks;
-
-		class Shared
-		{
-		public:
-			struct MusicBackup
-			{
-				MusicTracks tracks;
-				Variables variables;
 			};
 
-			struct NonMusicTracks : TrackCollection
+			struct Music : TrackCollection
 			{
-				struct
-				{
-					std::array<FMSFXTrack, 3> fm;
-					PSGMelodyTrack psg1;
-					PSGMelodyTrack psg2;
-					PSG3MelodyTrack psg3;
-
-					auto& FM3()  { return fm[0]; }
-					auto& FM4()  { return fm[1]; }
-					auto& FM5()  { return fm[2]; }
-					auto& PSG1() { return psg1; }
-					auto& PSG2() { return psg2; }
-					auto& PSG3() { return psg3; }
-
-					void Iterate(const auto &callback)
-					{
-						for (auto &track : fm)
-							callback(track);
-						callback(psg1);
-						callback(psg2);
-						callback(psg3);
-					}
-				} sfx;
-
-			#ifdef SMPS_EnableSpecSFX
-				struct
-				{
-					FMSFXTrack fm4;
-					PSG3MelodyTrack psg3;
-
-					void Iterate(const auto &callback)
-					{
-						callback(fm4);
-						callback(psg3);
-					}
-				} special_sfx;
+				DACTrack dac;
+				std::array<FMMusicTrack, 6> fm;
+				PSGMelodyTrack psg1;
+				PSGMelodyTrack psg2;
+				PSG3MelodyTrack psg3;
+			#ifdef SMPS_EnablePSGNoiseDrums
+				PSGDrumTrack psg_drum;
 			#endif
+
+				auto& FM1()  { return fm[0]; }
+				auto& FM2()  { return fm[1]; }
+				auto& FM3()  { return fm[2]; }
+				auto& FM4()  { return fm[3]; }
+				auto& FM5()  { return fm[4]; }
+				auto& FM6()  { return fm[5]; }
+				auto& PSG1() { return psg1; }
+				auto& PSG2() { return psg2; }
+				auto& PSG3() { return psg3; }
+				Track& PSG(const unsigned int index)
+				{
+					switch (index)
+					{
+						case 0:
+							return psg1;
+						case 1:
+							return psg2;
+						case 2:
+							return psg3;
+					}
+
+					std::unreachable();
+				}
 
 				void Iterate(const auto &callback)
 				{
-					sfx.Iterate(callback);
-				#ifdef SMPS_EnableSpecSFX
-					special_sfx.Iterate(callback);
+					callback(dac);
+					for (auto &track : fm)
+						callback(track);
+					callback(psg1);
+					callback(psg2);
+					callback(psg3);
+				#ifdef SMPS_EnablePSGNoiseDrums
+					callback(psg_drum);
 				#endif
 				}
-			};
 
-		private:
-			union
+				// TODO: Add a 'clear' method?
+			} music;
+
+			class Shared
 			{
-				MusicBackup music_backup;
-				NonMusicTracks non_music_tracks;
-			};
-			bool music_backup_active : 1;
+			public:
+				struct MusicBackup
+				{
+					Music tracks;
+					Variables variables;
+				};
 
-		public:
-			bool IsMusicBackupActive() const
-			{
-				return music_backup_active;
-			}
-
-			void CreateMusicBackup(const MusicTracks &tracks, const Variables &variables)
-			{
-				music_backup_active = true;
-
-				music_backup.tracks = tracks;
-				music_backup.variables = variables;
-			}
-
-			void DestroyMusicBackup()
-			{
-				// Mark the SFX as no longer playing, since their RAM has been trashed by the music backup.
-				non_music_tracks.Iterate(
-					[](Track &track)
+				struct NonMusicTracks : TrackCollection
+				{
+					struct
 					{
-						track.SetPlaying(false);
+						std::array<FMSFXTrack, 3> fm;
+						PSGMelodyTrack psg1;
+						PSGMelodyTrack psg2;
+						PSG3MelodyTrack psg3;
+
+						auto& FM3()  { return fm[0]; }
+						auto& FM4()  { return fm[1]; }
+						auto& FM5()  { return fm[2]; }
+						auto& PSG1() { return psg1; }
+						auto& PSG2() { return psg2; }
+						auto& PSG3() { return psg3; }
+
+						void Iterate(const auto &callback)
+						{
+							for (auto &track : fm)
+								callback(track);
+							callback(psg1);
+							callback(psg2);
+							callback(psg3);
+						}
+					} sfx;
+
+				#ifdef SMPS_EnableSpecSFX
+					struct
+					{
+						FMSFXTrack fm4;
+						PSG3MelodyTrack psg3;
+
+						void Iterate(const auto &callback)
+						{
+							callback(fm4);
+							callback(psg3);
+						}
+					} special_sfx;
+				#endif
+
+					void Iterate(const auto &callback)
+					{
+						sfx.Iterate(callback);
+					#ifdef SMPS_EnableSpecSFX
+						special_sfx.Iterate(callback);
+					#endif
 					}
-				);
+				};
 
-				music_backup_active = false;
-			}
+			private:
+				union
+				{
+					MusicBackup music_backup;
+					NonMusicTracks non_music_tracks;
+				};
+				bool music_backup_active : 1;
 
-			template<typename... Ts>
-			decltype(auto) Visit(Ts &&...visitors)
+			public:
+				bool IsMusicBackupActive() const
+				{
+					return music_backup_active;
+				}
+
+				void CreateMusicBackup(const Music &tracks, const Variables &variables)
+				{
+					music_backup_active = true;
+
+					music_backup.tracks = tracks;
+					music_backup.variables = variables;
+				}
+
+				void DestroyMusicBackup()
+				{
+					// Mark the SFX as no longer playing, since their RAM has been trashed by the music backup.
+					non_music_tracks.Iterate(
+						[](Track &track)
+						{
+							track.SetPlaying(false);
+						}
+					);
+
+					music_backup_active = false;
+				}
+
+				template<typename... Ts>
+				decltype(auto) Visit(Ts &&...visitors)
+				{
+					auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
+
+					if (music_backup_active)
+						return visitor(music_backup);
+					else
+						return visitor(non_music_tracks);
+				}
+
+				void VisitNonMusicTracks(const auto &callback)
+				{
+					return Visit(
+						[&callback](NonMusicTracks &non_music_tracks)
+						{
+							callback(non_music_tracks);
+						},
+						[](MusicBackup&) {}
+					);
+				}
+
+				void IterateNonMusicTracks(const auto &callback)
+				{
+					VisitNonMusicTracks(
+						[&callback](auto &non_music_tracks)
+						{
+							non_music_tracks.Iterate(callback);
+						}
+					);
+				}
+
+				void UpdateNonMusicTracks()
+				{
+					VisitNonMusicTracks(
+						[](auto &non_music_tracks)
+						{
+							non_music_tracks.Update();
+						}
+					);
+				}
+
+				NonMusicTracks& GetNonMusicTracks()
+				{
+					return Visit(
+						[](NonMusicTracks &non_music_tracks) -> NonMusicTracks&
+						{
+							return non_music_tracks;
+						},
+						[](MusicBackup&) -> NonMusicTracks&
+						{
+							std::unreachable();
+						}
+					);
+				}
+
+				MusicBackup& GetMusicBackup()
+				{
+					return Visit(
+						[](MusicBackup &music_backup) -> MusicBackup&
+						{
+							return music_backup;
+						},
+						[](NonMusicTracks&) -> MusicBackup&
+						{
+							std::unreachable();
+						}
+					);
+				}
+			} shared;
+
+			void Iterate(const auto &callback)
 			{
-				auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
-
-				if (music_backup_active)
-					return visitor(music_backup);
-				else
-					return visitor(non_music_tracks);
+				music.Iterate(callback);
+				shared.IterateNonMusicTracks(callback);
 			}
-
-			void VisitNonMusicTracks(const auto &callback)
-			{
-				return Visit(
-					[&callback](NonMusicTracks &non_music_tracks)
-					{
-						callback(non_music_tracks);
-					},
-					[](MusicBackup&) {}
-				);
-			}
-
-			void IterateNonMusicTracks(const auto &callback)
-			{
-				VisitNonMusicTracks(
-					[&callback](auto &non_music_tracks)
-					{
-						non_music_tracks.Iterate(callback);
-					}
-				);
-			}
-
-			void UpdateNonMusicTracks()
-			{
-				VisitNonMusicTracks(
-					[](auto &non_music_tracks)
-					{
-						non_music_tracks.Update();
-					}
-				);
-			}
-
-			NonMusicTracks& GetNonMusicTracks()
-			{
-				return Visit(
-					[](NonMusicTracks &non_music_tracks) -> NonMusicTracks&
-					{
-						return non_music_tracks;
-					},
-					[](MusicBackup&) -> NonMusicTracks&
-					{
-						std::unreachable();
-					}
-				);
-			}
-
-			MusicBackup& GetMusicBackup()
-			{
-				return Visit(
-					[](MusicBackup &music_backup) -> MusicBackup&
-					{
-						return music_backup;
-					},
-					[](NonMusicTracks&) -> MusicBackup&
-					{
-						std::unreachable();
-					}
-				);
-			}
-		} shared;
-
-		void IterateTracks(const auto &callback)
-		{
-			music_tracks.Iterate(callback);
-			shared.IterateNonMusicTracks(callback);
-		}
+		} tracks;
 	};
 
 	struct Priority
