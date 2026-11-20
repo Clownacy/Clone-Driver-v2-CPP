@@ -198,7 +198,7 @@ namespace SMPS
 
 	struct FMSFXTrack : FMTrack
 	{
-		const Voice *voice_ptr;
+		const Voice *voices;
 	};
 
 	struct PSGTrack : Track
@@ -267,7 +267,7 @@ namespace SMPS
 	struct Variables
 	{
 		Queue queue;
-		const Voice *voice_ptr;
+		const Voice *music_voices;
 		unsigned char sndprio;
 		unsigned char main_tempo_timeout;
 		unsigned char main_tempo;
@@ -306,15 +306,15 @@ namespace SMPS
 			PSGTrack psg_noise;
 		#endif
 
-			FMMusicTrack& FM1()  { return fm[0]; }
-			FMMusicTrack& FM2()  { return fm[1]; }
-			FMMusicTrack& FM3()  { return fm[2]; }
-			FMMusicTrack& FM4()  { return fm[3]; }
-			FMMusicTrack& FM5()  { return fm[4]; }
-			FMMusicTrack& FM6()  { return fm[5]; }
-			PSGTrack& PSG1() { return psg[0]; }
-			PSGTrack& PSG2() { return psg[1]; }
-			PSGTrack& PSG3() { return psg[2]; }
+			auto& FM1()  { return fm[0]; }
+			auto& FM2()  { return fm[1]; }
+			auto& FM3()  { return fm[2]; }
+			auto& FM4()  { return fm[3]; }
+			auto& FM5()  { return fm[4]; }
+			auto& FM6()  { return fm[5]; }
+			auto& PSG1() { return psg[0]; }
+			auto& PSG2() { return psg[1]; }
+			auto& PSG3() { return psg[2]; }
 
 			void Iterate(const auto &callback)
 			{
@@ -347,12 +347,12 @@ namespace SMPS
 					std::array<FMSFXTrack, 3> fm;
 					std::array<PSGTrack, 3> psg;
 
-					FMSFXTrack& FM3()  { return fm[0]; }
-					FMSFXTrack& FM4()  { return fm[1]; }
-					FMSFXTrack& FM5()  { return fm[2]; }
-					PSGTrack& PSG1() { return psg[0]; }
-					PSGTrack& PSG2() { return psg[1]; }
-					PSGTrack& PSG3() { return psg[2]; }
+					auto& FM3()  { return fm[0]; }
+					auto& FM4()  { return fm[1]; }
+					auto& FM5()  { return fm[2]; }
+					auto& PSG1() { return psg[0]; }
+					auto& PSG2() { return psg[1]; }
+					auto& PSG3() { return psg[2]; }
 
 					void Iterate(const auto &callback)
 					{

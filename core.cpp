@@ -1161,11 +1161,11 @@ const Voice* FMTrack::GetVoices()
 	return Visit(
 		[](FMMusicTrack&) -> const Voice*
 		{
-			return state->variables.voice_ptr;
+			return state->variables.music_voices;
 		},
 		[](FMSFXTrack &track) -> const Voice*
 		{
-			return track.voice_ptr;
+			return track.voices;
 		},
 	#ifdef SMPS_EnablePWM
 		[](PWMTrack&) -> const Voice* { std::unreachable(); },
@@ -1837,7 +1837,7 @@ static void Sound_PlayBGM(const unsigned int id)
 		state->variables.ignore_speedup = true;
 
 	const auto voice_offset = ReadAlignedSignedWord(&header[0]);
-	state->variables.voice_ptr =
+	state->variables.music_voices =
 #ifdef SMPS_EnableUniversalVoiceBank
 		voice_offset == 0
 		? data.universal_voice_bank
@@ -2087,7 +2087,7 @@ static void Sound_PlaySFX(const unsigned int id)
 			[&voices](FMSFXTrack &fm_track)
 			{
 				fm_track.ams_fms_pan = 0xC0;
-				fm_track.voice_ptr = voices;
+				fm_track.voices = voices;
 			},
 			[&voices](FMMusicTrack&)
 			{
@@ -2168,7 +2168,7 @@ static void Sound_PlaySpecial(const unsigned int id)
 			[&voices](FMSFXTrack &fm_track)
 			{
 				fm_track.ams_fms_pan = 0xC0;
-				fm_track.voice_ptr = voices;
+				fm_track.voices = voices;
 			},
 			[&voices](FMMusicTrack&)
 			{
