@@ -1940,16 +1940,13 @@ static void Sound_PlayBGM(const unsigned int id)
 		}
 	);
 
-	LockZ80BusFMSafe(
-		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+	state->tracks.music.IterateWithZ80Bus(VisitHelper(
+		[](FMTrack &track, ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			for (FMTrack &track : state->tracks.music.fm)
-				if (!track.IsOverridden())
-					track.SilenceChannel(z80_bus);
-		}
-	);
+			if (!track.IsOverridden())
+				track.SilenceChannel(z80_bus);
 
-	state->tracks.music.Iterate(VisitHelper(
+		},
 		[](PSGTrack &track)
 		{
 			track.NoteOff();
@@ -1957,8 +1954,7 @@ static void Sound_PlayBGM(const unsigned int id)
 	#ifdef SMPS_EnablePWM
 		[](PWMTrack&) {},
 	#endif
-		[](DACTrack&) {},
-		[](FMTrack&) {}
+		[](DACTrack&, ClownMDSDK::MainCPU::Z80::Bus&) {}
 	));
 
 #ifdef SMPS_EnablePWM
@@ -2225,41 +2221,35 @@ static void Sound_PlayCommand(const unsigned int id)
 			state->tracks.shared.VisitNonMusicTracks(
 				[](auto &non_music_tracks)
 				{
-					LockZ80BusFMSafe(
-						[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+					non_music_tracks.sfx.IterateWithZ80Bus(VisitHelper(
+						[&non_music_tracks](FMTrack &track, ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 						{
-							for (FMTrack &track : non_music_tracks.sfx.fm)
+							if (track.IsPlaying())
 							{
-								if (track.IsPlaying())
-								{
-									track.SetPlaying(false);
-									track.SetHeld(false);
+								track.SetPlaying(false);
+								track.SetHeld(false);
 
-									track.NoteOff(z80_bus);
+								track.NoteOff(z80_bus);
 
+							#ifdef SMPS_EnableSpecSFX
+								auto &special_fm4 = non_music_tracks.special_sfx.fm4;
+							#endif
+
+								FMTrack &other_track =
 								#ifdef SMPS_EnableSpecSFX
-									auto &special_fm4 = non_music_tracks.special_sfx.fm4;
+									track.voice_control == 4 && special_fm4.IsPlaying() ? special_fm4 :
 								#endif
+									// TODO: Get rid of this cast.
+									static_cast<FMTrack&>(SFX_BGMChannelRAM(track.voice_control - 2));
 
-									FMTrack &other_track =
-									#ifdef SMPS_EnableSpecSFX
-										track.voice_control == 4 && special_fm4.IsPlaying() ? special_fm4 :
-									#endif
-										// TODO: Get rid of this cast.
-										static_cast<FMTrack&>(SFX_BGMChannelRAM(track.voice_control - 2));
-
-									if (other_track.IsOverridden())
-									{
-										other_track.SetOverridden(false);
-										other_track.SetResting(true);
-										other_track.SetVoice(z80_bus);
-									}
+								if (other_track.IsOverridden())
+								{
+									other_track.SetOverridden(false);
+									other_track.SetResting(true);
+									other_track.SetVoice(z80_bus);
 								}
 							}
-						}
-					);
-
-					non_music_tracks.sfx.Iterate(VisitHelper(
+						},
 						[](PSGMelodyTrack &track)
 						{
 							if (track.IsPlaying())
@@ -2309,7 +2299,10 @@ static void Sound_PlayCommand(const unsigned int id)
 								}
 							}
 						},
-						[](FMTrack&) {}
+						[](DACTrack&, ClownMDSDK::MainCPU::Z80::Bus&)
+						{
+							std::unreachable();
+						}
 					));
 				}
 			);
@@ -2523,26 +2516,20 @@ static void UpdateMusic()
 		state->variables.fadein_counter = 0x28;
 
 		// Mark music tracks as resting and update the sound hardware to suit them.
-		LockZ80BusFMSafe(
-			[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+		state->tracks.music.IterateWithZ80Bus(VisitHelper(
+			[](DACTrack &track, ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 			{
-				DACTrack &dac_track = state->tracks.music.dac;
-
-				if (dac_track.IsPlaying())
-					dac_track.ApplyVolumeAttenuation(z80_bus);
-
-				for (FMTrack &fm_track : state->tracks.music.fm)
+				if (track.IsPlaying())
+					track.ApplyVolumeAttenuation(z80_bus);
+			},
+			[](FMTrack &track, ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+			{
+				if (track.IsPlaying())
 				{
-					if (fm_track.IsPlaying())
-					{
-						fm_track.SetResting(true);
-						fm_track.SetVoice(z80_bus);
-					}
+					track.SetResting(true);
+					track.SetVoice(z80_bus);
 				}
-			}
-		);
-
-		state->tracks.music.Iterate(VisitHelper(
+			},
 			[](PSGTrack &track)
 			{
 				if (track.IsPlaying())
@@ -2585,29 +2572,17 @@ static void DoFadeIn()
 	--state->variables.fadein_counter;
 	state->variables.fadein_delay = 2;
 
-	LockZ80BusFMSafe(
-		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+	state->tracks.IterateWithZ80Bus(VisitHelper(
+		[](DACTrack &track, ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			state->tracks.Iterate(VisitHelper(
-				[&z80_bus](DACTrack &track)
-				{
-					if (track.IsPlaying())
-						track.ApplyVolumeAttenuation(z80_bus);
-				},
-				[&z80_bus](FMTrack &track)
-				{
-					if (track.IsPlaying())
-						track.SendVoiceTL(z80_bus);
-				},
-			#ifdef SMPS_EnablePWM
-				[](PWMTrack&) {},
-			#endif
-				[](PSGTrack&) {}
-			));
-		}
-	);
-
-	state->tracks.Iterate(VisitHelper(
+			if (track.IsPlaying())
+				track.ApplyVolumeAttenuation(z80_bus);
+		},
+		[](FMTrack &track, ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+		{
+			if (track.IsPlaying())
+				track.SendVoiceTL(z80_bus);
+		},
 		[](PSGTrack &track)
 		{
 			if (track.IsPlaying())
@@ -2642,37 +2617,31 @@ static void DoFadeOut()
 
 	state->variables.fadeout_delay = 3;
 
-	LockZ80BusFMSafe(
-		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+	state->tracks.music.IterateWithZ80Bus(VisitHelper(
+		[](DACTrack &track, ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 		{
-			DACTrack &dac_track = state->tracks.music.dac;
-
-			if (dac_track.IsPlaying())
+			if (track.IsPlaying())
 			{
-				dac_track.volume_attenuation += 4;
+				track.volume_attenuation += 4;
 
-				if (dac_track.volume_attenuation >= 0x80)
-					dac_track.SetPlaying(false);
+				if (track.volume_attenuation >= 0x80)
+					track.SetPlaying(false);
 				else
-					dac_track.ApplyVolumeAttenuation(z80_bus);
+					track.ApplyVolumeAttenuation(z80_bus);
 			}
-
-			for (FMTrack &fm_track : state->tracks.music.fm)
+		},
+		[](FMTrack &track, ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+		{
+			if (track.IsPlaying())
 			{
-				if (fm_track.IsPlaying())
-				{
-					++fm_track.volume_attenuation;
+				++track.volume_attenuation;
 
-					if (fm_track.volume_attenuation >= 0x80)
-						fm_track.SetPlaying(false);
-					else
-						fm_track.SendVoiceTL(z80_bus);
-				}
+				if (track.volume_attenuation >= 0x80)
+					track.SetPlaying(false);
+				else
+					track.SendVoiceTL(z80_bus);
 			}
-		}
-	);
-
-	state->tracks.music.Iterate(VisitHelper(
+		},
 		[](PSGMelodyTrack &track)
 		{
 			if (track.IsPlaying())

@@ -366,21 +366,73 @@ namespace SMPS
 
 		unsigned char music_tempo_modifier, music_tempo_modifier_master;
 
-		struct Tracks
+		struct TrackCollection
 		{
-			struct TrackCollection
+			void Update(this auto &self)
 			{
-				void Update(this auto &self)
-				{
-					self.Iterate(
-						[](auto &track)
-						{
-							track.UpdateTrack();
-						}
-					);
-				}
-			};
+				self.Iterate(
+					[](auto &track)
+					{
+						track.UpdateTrack();
+					}
+				);
+			}
 
+			void IterateWithZ80Bus(this auto &self, const auto &callback)
+			{
+				LockZ80BusFMSafe(
+					[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+					{
+						self.Iterate(VisitHelper(
+							[&callback, &z80_bus](DACTrack &track)
+							{
+								callback(track, z80_bus);
+							},
+							[&callback, &z80_bus](FMTrack &track)
+							{
+								callback(track, z80_bus);
+							},
+						#ifdef SMPS_EnablePWM
+							[](PWMTrack&) {},
+						#endif
+						#ifdef SMPS_EnablePSGNoiseDrums
+							[](PSGDrumTrack&) {},
+						#endif
+							[](PSGMelodyTrack&) {},
+							[](PSG3MelodyTrack&) {}
+						));
+					}
+				);
+
+				self.Iterate(VisitHelper(
+				#ifdef SMPS_EnablePWM
+					[&callback](PWMTrack &track)
+					{
+						callback(track);
+					},
+				#endif
+					[&callback](PSGMelodyTrack &track)
+					{
+						callback(track);
+					},
+					[&callback](PSG3MelodyTrack &track)
+					{
+						callback(track);
+					},
+				#ifdef SMPS_EnablePSGNoiseDrums
+					[&callback](PSGDrumTrack &track)
+					{
+						callback(track);
+					},
+				#endif
+					[](DACTrack&) {},
+					[](FMTrack&) {}
+				));
+			}
+		};
+
+		struct Tracks : TrackCollection
+		{
 			struct Music : TrackCollection
 			{
 				DACTrack dac;
@@ -443,7 +495,7 @@ namespace SMPS
 
 				struct NonMusicTracks : TrackCollection
 				{
-					struct
+					struct : TrackCollection
 					{
 						std::array<FMSFXTrack, 3> fm;
 						PSGMelodyTrack psg1;
@@ -468,7 +520,7 @@ namespace SMPS
 					} sfx;
 
 				#ifdef SMPS_EnableSpecSFX
-					struct
+					struct : TrackCollection
 					{
 						FMSFXTrack fm4;
 						PSG3MelodyTrack psg3;
