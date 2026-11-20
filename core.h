@@ -129,8 +129,9 @@ namespace SMPS
 		[[nodiscard]] bool NoteTimeoutUpdate();
 		[[nodiscard]] std::optional<unsigned int> DoModulationEnvelope();
 		[[nodiscard]] bool IsMusic() const;
+		[[nodiscard]] bool IsPSG3() const;
 	#ifdef SMPS_EnablePSGNoiseDrums
-		[[nodiscard]] bool IsPSGNoise() const;
+		[[nodiscard]] bool IsPSGDrum() const;
 	#endif
 		void ReloadModulationData();
 		void DoModulation();
@@ -220,7 +221,6 @@ namespace SMPS
 	struct PSGTrack : Track
 	{
 		unsigned char vol_env_index;
-		unsigned char psg_noise;
 
 		[[nodiscard]] bool UpdateFreq();
 		[[nodiscard]] bool DoNoteOn();
@@ -236,6 +236,11 @@ namespace SMPS
 	struct PSGMelodyTrack : PSGTrack
 	{
 		void UpdateTrackInternal(bool begin_new_note);
+	};
+
+	struct PSG3MelodyTrack : PSGMelodyTrack
+	{
+		unsigned char psg_noise;
 	};
 
 #ifdef SMPS_EnablePSGNoiseDrums
@@ -264,10 +269,13 @@ namespace SMPS
 		else if (IsPSG())
 		{
 #ifdef SMPS_EnablePSGNoiseDrums
-			if (IsPSGNoise())
+			if (IsPSGDrum())
 				return visitor(static_cast<PSGDrumTrack&>(*this));
 			else
 #endif
+			if (IsPSG3())
+				return visitor(static_cast<PSG3MelodyTrack&>(*this));
+			else
 				return visitor(static_cast<PSGMelodyTrack&>(*this));
 		}
 #ifdef SMPS_EnablePWM
@@ -374,7 +382,9 @@ namespace SMPS
 		{
 			DACTrack dac;
 			std::array<FMMusicTrack, 6> fm;
-			std::array<PSGMelodyTrack, 3> psg;
+			PSGMelodyTrack psg1;
+			PSGMelodyTrack psg2;
+			PSG3MelodyTrack psg3;
 		#ifdef SMPS_EnablePSGNoiseDrums
 			PSGDrumTrack psg_drum;
 		#endif
@@ -385,17 +395,32 @@ namespace SMPS
 			auto& FM4()  { return fm[3]; }
 			auto& FM5()  { return fm[4]; }
 			auto& FM6()  { return fm[5]; }
-			auto& PSG1() { return psg[0]; }
-			auto& PSG2() { return psg[1]; }
-			auto& PSG3() { return psg[2]; }
+			auto& PSG1() { return psg1; }
+			auto& PSG2() { return psg2; }
+			auto& PSG3() { return psg3; }
+			Track& PSG(const unsigned int index)
+			{
+				switch (index)
+				{
+					case 0:
+						return psg1;
+					case 1:
+						return psg2;
+					case 2:
+						return psg3;
+				}
+
+				std::unreachable();
+			}
 
 			void Iterate(const auto &callback)
 			{
 				callback(dac);
 				for (auto &track : fm)
 					callback(track);
-				for (auto &track : psg)
-					callback(track);
+				callback(psg1);
+				callback(psg2);
+				callback(psg3);
 			#ifdef SMPS_EnablePSGNoiseDrums
 				callback(psg_drum);
 			#endif
@@ -418,21 +443,24 @@ namespace SMPS
 				struct
 				{
 					std::array<FMSFXTrack, 3> fm;
-					std::array<PSGMelodyTrack, 3> psg;
+					PSGMelodyTrack psg1;
+					PSGMelodyTrack psg2;
+					PSG3MelodyTrack psg3;
 
 					auto& FM3()  { return fm[0]; }
 					auto& FM4()  { return fm[1]; }
 					auto& FM5()  { return fm[2]; }
-					auto& PSG1() { return psg[0]; }
-					auto& PSG2() { return psg[1]; }
-					auto& PSG3() { return psg[2]; }
+					auto& PSG1() { return psg1; }
+					auto& PSG2() { return psg2; }
+					auto& PSG3() { return psg3; }
 
 					void Iterate(const auto &callback)
 					{
 						for (auto &track : fm)
 							callback(track);
-						for (auto &track : psg)
-							callback(track);
+						callback(psg1);
+						callback(psg2);
+						callback(psg3);
 					}
 				} sfx;
 
@@ -440,7 +468,7 @@ namespace SMPS
 				struct
 				{
 					FMSFXTrack fm4;
-					PSGMelodyTrack psg3;
+					PSG3MelodyTrack psg3;
 
 					void Iterate(const auto &callback)
 					{

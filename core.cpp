@@ -616,7 +616,15 @@ bool Track::CoordFlag(const unsigned int flag)
 				},
 				[&non_music_tracks](PSGTrack &track)
 				{
-					PSGTrack *other_track;
+					// TODO: Get rid of this dumb cast.
+					PSGTrack *other_track = static_cast<PSGTrack*>(&SFX_BGMChannelRAM(track.voice_control >> 5)); // TODO: Cast to unsigned integer?
+
+					other_track->SetOverridden(false);
+					other_track->SetResting(true);
+				},
+				[&non_music_tracks](PSG3MelodyTrack &track)
+				{
+					PSG3MelodyTrack *other_track;
 				#ifdef SMPS_EnableSpecSFX
 					auto &special_psg3 = non_music_tracks.special_sfx.psg3;
 
@@ -625,7 +633,7 @@ bool Track::CoordFlag(const unsigned int flag)
 					else
 				#endif
 						// TODO: Get rid of this dumb cast.
-						other_track = static_cast<PSGTrack*>(&SFX_BGMChannelRAM(track.voice_control >> 5)); // TODO: Cast to unsigned integer?
+						other_track = static_cast<PSG3MelodyTrack*>(&SFX_BGMChannelRAM(track.voice_control >> 5)); // TODO: Cast to unsigned integer?
 
 					other_track->SetOverridden(false);
 					other_track->SetResting(true);
@@ -647,7 +655,7 @@ bool Track::CoordFlag(const unsigned int flag)
 			const auto psg_noise = *data_pointer++;
 
 			Visit(
-				[&psg_noise](PSGTrack &track)
+				[&psg_noise](PSG3MelodyTrack &track)
 				{
 					track.psg_noise = psg_noise;
 
@@ -663,7 +671,8 @@ bool Track::CoordFlag(const unsigned int flag)
 				[](PWMTrack&) {},
 			#endif
 				[](DACTrack&) {},
-				[](FMTrack&) {}
+				[](FMTrack&) {},
+				[](PSGTrack&) {}
 			);
 
 			break;
@@ -995,8 +1004,13 @@ bool Track::IsMusic() const
 	return static_cast<const void*>(this) < static_cast<const void*>(&state->shared);
 }
 
+bool Track::IsPSG3() const
+{
+	return voice_control >= 0xC0;
+}
+
 #ifdef SMPS_EnablePSGNoiseDrums
-bool Track::IsPSGNoise() const
+bool Track::IsPSGDrum() const
 {
 	return this == &state->music_tracks.psg_drum;
 }
@@ -1875,7 +1889,7 @@ static void Sound_PlayBGM(const unsigned int id)
 
 	for (unsigned int i = 0; i < total_psg_tracks; ++i)
 	{
-		Track &track = state->music_tracks.psg[i];
+		Track &track = state->music_tracks.PSG(i);
 
 		track.SetPlaying(true);
 		track.tempo_divider = tempo_divider;
@@ -1939,8 +1953,17 @@ static void Sound_PlayBGM(const unsigned int id)
 		}
 	);
 
-	for (PSGTrack &track : state->music_tracks.psg)
-		track.NoteOff();
+	state->music_tracks.Iterate(VisitHelper(
+		[](PSGTrack &track)
+		{
+			track.NoteOff();
+		},
+	#ifdef SMPS_EnablePWM
+		[](PWMTrack&) {},
+	#endif
+		[](DACTrack&) {},
+		[](FMTrack&) {}
+	));
 
 #ifdef SMPS_EnablePWM
 	PWMSilenceAll();
@@ -2239,35 +2262,57 @@ static void Sound_PlayCommand(const unsigned int id)
 						}
 					);
 
-					for (PSGTrack &track : non_music_tracks.sfx.psg)
-					{
-						if (track.IsPlaying())
+					non_music_tracks.sfx.Iterate(VisitHelper(
+						[](PSGMelodyTrack &track)
 						{
-							track.SetPlaying(false);
-							track.SetHeld(false);
-
-							track.NoteOff();
-
-							PSGTrack &other_track =
-
-							#ifdef SMPS_EnableSpecSFX
-								(track.voice_control == 0xC0 || track.voice_control == 0xE0) && non_music_tracks.special_sfx.psg3.IsPlaying()
-								? non_music_tracks.special_sfx.psg3
-								:
-							#endif
-								// TODO: Get rid of this cast.
-								static_cast<PSGTrack&>(SFX_BGMChannelRAM(track.voice_control >> 5));
-
-							if (other_track.IsOverridden())
+							if (track.IsPlaying())
 							{
-								other_track.SetOverridden(false);
-								other_track.SetResting(true);
+								track.SetPlaying(false);
+								track.SetHeld(false);
 
-								if (other_track.voice_control == 0xE0)
-									ClownMDSDK::MainCPU::PSG::Write(other_track.psg_noise);
+								track.NoteOff();
+
+								// TODO: Get rid of this cast.
+								PSGMelodyTrack &other_track = static_cast<PSGMelodyTrack&>(SFX_BGMChannelRAM(track.voice_control >> 5));
+
+								if (other_track.IsOverridden())
+								{
+									other_track.SetOverridden(false);
+									other_track.SetResting(true);
+								}
 							}
-						}
-					}
+						},
+						[&non_music_tracks](PSG3MelodyTrack &track)
+						{
+							if (track.IsPlaying())
+							{
+								track.SetPlaying(false);
+								track.SetHeld(false);
+
+								track.NoteOff();
+
+								PSG3MelodyTrack &other_track =
+
+								#ifdef SMPS_EnableSpecSFX
+									(track.voice_control == 0xC0 || track.voice_control == 0xE0) && non_music_tracks.special_sfx.psg3.IsPlaying()
+									? non_music_tracks.special_sfx.psg3
+									:
+								#endif
+									// TODO: Get rid of this cast.
+									static_cast<PSG3MelodyTrack&>(SFX_BGMChannelRAM(track.voice_control >> 5));
+
+								if (other_track.IsOverridden())
+								{
+									other_track.SetOverridden(false);
+									other_track.SetResting(true);
+
+									if (other_track.voice_control == 0xE0)
+										ClownMDSDK::MainCPU::PSG::Write(other_track.psg_noise);
+								}
+							}
+						},
+						[](FMTrack&) {}
+					));
 				}
 			);
 
@@ -2302,7 +2347,7 @@ static void Sound_PlayCommand(const unsigned int id)
 						}
 					}
 
-					PSGTrack &background_sfx_psg3 = non_music_tracks.special_sfx.psg3;
+					PSG3MelodyTrack &background_sfx_psg3 = non_music_tracks.special_sfx.psg3;
 
 					if (background_sfx_psg3.IsPlaying())
 					{
@@ -2312,7 +2357,7 @@ static void Sound_PlayCommand(const unsigned int id)
 						{
 							background_sfx_psg3.SendNoteOff();
 
-							PSGTrack &music_psg3 = state->music_tracks.PSG3();
+							PSG3MelodyTrack &music_psg3 = state->music_tracks.PSG3();
 							music_psg3.SetOverridden(false);
 							music_psg3.SetResting(true);
 
@@ -2499,17 +2544,32 @@ static void UpdateMusic()
 			}
 		);
 
-		for (PSGTrack &psg_track : state->music_tracks.psg)
-		{
-			if (psg_track.IsPlaying())
+		state->music_tracks.Iterate(VisitHelper(
+			[](PSGTrack &track)
 			{
-				psg_track.SetResting(true);
-				psg_track.NoteOff();
+				if (track.IsPlaying())
+				{
+					track.SetResting(true);
+					track.NoteOff();
+				}
+			},
+			[](PSG3MelodyTrack &track)
+			{
+				if (track.IsPlaying())
+				{
+					track.SetResting(true);
+					track.NoteOff();
 
-				if (psg_track.voice_control == 0xE0)
-					ClownMDSDK::MainCPU::PSG::Write(psg_track.psg_noise);
-			}
-		}
+					if (track.voice_control == 0xE0)
+						ClownMDSDK::MainCPU::PSG::Write(track.psg_noise);
+				}
+			},
+		#ifdef SMPS_EnablePWM
+			[](PWMTrack&) {},
+		#endif
+			[](DACTrack&) {},
+			[](FMTrack&) {}
+		));
 
 		state->music_tracks.dac.SetFM6Overridden(true);
 		state->music_tracks.FM6().SetFM6Overridden(true);
@@ -2614,37 +2674,44 @@ static void DoFadeOut()
 		}
 	);
 
-	for (PSGTrack &psg_track : state->music_tracks.psg)
-	{
-		if (psg_track.IsPlaying())
+	state->music_tracks.Iterate(VisitHelper(
+		[](PSGMelodyTrack &track)
 		{
-			psg_track.volume_attenuation += 4;
-
-			if (psg_track.volume_attenuation >= 0x80)
+			if (track.IsPlaying())
 			{
-				psg_track.SetPlaying(false);
+				track.volume_attenuation += 4;
+
+				if (track.volume_attenuation >= 0x80)
+				{
+					track.SetPlaying(false);
+				}
+				else
+				{
+					// If a volume envelope is active, then it will handle updating the volume for us.
+					// Doing it manually will just conflict with it.
+					if (track.voice_index == 0)
+						track.SetVolumeAttenuation(track.volume_attenuation);
+				}
 			}
-			else
+		},
+	#ifdef SMPS_EnablePSGNoiseDrums
+		[](PSGDrumTrack &track)
+		{
+			if (track.IsPlaying())
 			{
-				// If a volume envelope is active, then it will handle updating the volume for us.
-				// Doing it manually will just conflict with it.
-				if (psg_track.voice_index == 0)
-					psg_track.SetVolumeAttenuation(psg_track.volume_attenuation);
+				state->variables.psg_drum_volume += 4;
+
+				if (state->variables.psg_drum_volume >= 0x80)
+					track.SetPlaying(false);
 			}
-		}
-	}
-
-#ifdef SMPS_EnablePSGNoiseDrums
-	PSGTrack &psg_track = state->music_tracks.psg_drum;
-
-	if (psg_track.IsPlaying())
-	{
-		state->variables.psg_drum_volume += 4;
-
-		if (state->variables.psg_drum_volume >= 0x80)
-			psg_track.SetPlaying(false);
-	}
-#endif
+		},
+	#endif
+	#ifdef SMPS_EnablePWM
+		[](PWMTrack&) {},
+	#endif
+		[](DACTrack&) {},
+		[](FMTrack&) {}
+	));
 }
 
 static void HandlePause()
