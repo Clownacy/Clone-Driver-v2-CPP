@@ -995,10 +995,12 @@ bool Track::IsMusic() const
 	return static_cast<const void*>(this) < static_cast<const void*>(&state->shared);
 }
 
+#ifdef SMPS_EnablePSGNoiseDrums
 bool Track::IsPSGNoise() const
 {
 	return this == &state->music_tracks.psg_noise;
 }
+#endif
 
 void Track::ReloadModulationData()
 {

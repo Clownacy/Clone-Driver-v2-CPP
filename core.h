@@ -15,7 +15,7 @@
 #define SMPS_PushSFXBehaviour
 #define SMPS_EnableContSFX
 #define SMPS_EnableUniversalVoiceBank
-#define SMPS_EnablePSGNoiseDrums // TODO: Turn this back off.
+//#define SMPS_EnablePSGNoiseDrums
 
 namespace SMPS
 {
@@ -129,7 +129,9 @@ namespace SMPS
 		[[nodiscard]] bool NoteTimeoutUpdate();
 		[[nodiscard]] std::optional<unsigned int> DoModulationEnvelope();
 		[[nodiscard]] bool IsMusic() const;
+	#ifdef SMPS_EnablePSGNoiseDrums
 		[[nodiscard]] bool IsPSGNoise() const;
+	#endif
 		void ReloadModulationData();
 		void DoModulation();
 		[[nodiscard]] std::optional<unsigned char> GetNoteOrDuration();
