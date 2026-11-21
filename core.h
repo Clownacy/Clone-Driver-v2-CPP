@@ -101,11 +101,6 @@ namespace SMPS
 		return std::to_underlying(id) < 0x10;
 	}
 
-	inline bool IsDAC(const ChannelID id)
-	{
-		return (std::to_underlying(id) & 0x08) != 0;
-	}
-
 #ifdef SMPS_EnablePWM
 	inline bool IsPWM(const ChannelID id)
 	{
@@ -325,7 +320,7 @@ namespace SMPS
 	{
 		auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
 
-		if (IsDAC(voice_control))
+		if (voice_control == ChannelID::DAC)
 		{
 			return visitor(static_cast<DACTrack&>(*this));
 		}
