@@ -2,6 +2,7 @@
 #define CLONE_DRIVER_CORE_H
 
 #include <array>
+#include <cassert>
 #include <optional>
 
 #include <clownmdsdk.h>
@@ -66,10 +67,78 @@ namespace SMPS
 		unsigned char steps;
 	};
 
+	enum class ChannelID : unsigned char
+	{
+		FM1 = 0,
+		FM2 = 1,
+		FM3 = 2,
+		FM4 = 4,
+		FM5 = 5,
+		FM6 = 6,
+
+	#ifdef SMPS_EnablePWM
+		PWM1 = 8 | 0,
+		PWM2 = 8 | 2,
+		PWM3 = 8 | 4,
+		PWM4 = 8 | 6,
+	#endif
+
+		DAC = 0x10 | 6,
+
+		PSG1 = 0x80,
+		PSG2 = 0xA0,
+		PSG3 = 0xC0,
+		PSGNoise = 0xE0,
+	};
+
+	inline bool IsFM(const ChannelID id)
+	{
+		return std::to_underlying(id) < 0x08;
+	}
+
+#ifdef SMPS_EnablePWM
+	inline bool IsPWM(const ChannelID id)
+	{
+		return (std::to_underlying(id) & 0x08) != 0;
+	}
+#endif
+
+	inline bool IsDAC(const ChannelID id)
+	{
+		return (std::to_underlying(id) & 0x10) != 0;
+	}
+
+	inline bool IsPSG(const ChannelID id)
+	{
+		return (std::to_underlying(id) & 0x80) != 0;
+	}
+
+	inline unsigned int GetFMChannelID(const ChannelID id)
+	{
+		assert(IsFM(id));
+		return std::to_underlying(id);
+	}
+
+	inline unsigned int GetFMPort(const ChannelID id)
+	{
+		return (GetFMChannelID(id) & 4) != 0;
+	}
+
+	inline unsigned int GetFMSlot(const ChannelID id)
+	{
+		return GetFMChannelID(id) & 3;
+	}
+
+	inline unsigned int GetPSGChannelID(const ChannelID id)
+	{
+		assert(IsPSG(id));
+		return std::to_underlying(id);
+	}
+
 	struct Track
 	{
 		unsigned char playback_control;
-		unsigned char voice_control;
+		ChannelID voice_control;
 		unsigned char tempo_divider;
 		signed char transpose;
 		unsigned char volume_attenuation;
@@ -124,9 +193,9 @@ namespace SMPS
 		[[nodiscard]] bool NoteTimeoutUpdate();
 		[[nodiscard]] std::optional<unsigned int> DoModulationEnvelope();
 		[[nodiscard]] bool IsMusic() const;
-		[[nodiscard]] bool IsPSG3() const;
+		[[nodiscard]] bool IsPSG3MelodyTrack() const;
 	#ifdef SMPS_EnablePSGNoiseDrums
-		[[nodiscard]] bool IsPSGDrum() const;
+		[[nodiscard]] bool IsPSGDrumTrack() const;
 	#endif
 		void ReloadModulationData();
 		void DoModulation();
@@ -143,12 +212,6 @@ namespace SMPS
 			else \
 				(VARIABLE) &= ~(1 << (BIT)); \
 		}
-
-		BIT_METHOD_IS(voice_control, 7, PSG)
-		BIT_METHOD_IS(voice_control, 4, DAC)
-	#ifdef SMPS_EnablePWM
-		BIT_METHOD_IS(voice_control, 3, PWM)
-	#endif
 
 		BIT_METHODS(playback_control, 7, Playing)
 		BIT_METHODS(playback_control, 6, FM6Overridden)
@@ -257,24 +320,24 @@ namespace SMPS
 	{
 		auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
 
-		if (IsDAC())
+		if (IsDAC(voice_control))
 		{
 			return visitor(static_cast<DACTrack&>(*this));
 		}
-		else if (IsPSG())
+		else if (IsPSG(voice_control))
 		{
 #ifdef SMPS_EnablePSGNoiseDrums
-			if (IsPSGDrum())
+			if (IsPSGDrumTrack())
 				return visitor(static_cast<PSGDrumTrack&>(*this));
 			else
 #endif
-			if (IsPSG3())
+			if (IsPSG3MelodyTrack())
 				return visitor(static_cast<PSG3MelodyTrack&>(*this));
 			else
 				return visitor(static_cast<PSGMelodyTrack&>(*this));
 		}
 #ifdef SMPS_EnablePWM
-		else if (IsPWM())
+		else if (IsPWM(voice_control))
 		{
 			return visitor(static_cast<PWMTrack&>(*this));
 		}
