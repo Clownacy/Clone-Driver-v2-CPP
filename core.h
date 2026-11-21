@@ -76,14 +76,14 @@ namespace SMPS
 		FM5 = 5,
 		FM6 = 6,
 
-	#ifdef SMPS_EnablePWM
-		PWM1 = 8 | 0,
-		PWM2 = 8 | 2,
-		PWM3 = 8 | 4,
-		PWM4 = 8 | 6,
-	#endif
+		DAC = 8 | 6,
 
-		DAC = 0x10 | 6,
+	#ifdef SMPS_EnablePWM
+		PWM1 = 0x10 | 0,
+		PWM2 = 0x10 | 2,
+		PWM3 = 0x10 | 4,
+		PWM4 = 0x10 | 6,
+	#endif
 
 		PSG1 = 0x80,
 		PSG2 = 0xA0,
@@ -96,17 +96,22 @@ namespace SMPS
 		return std::to_underlying(id) < 0x08;
 	}
 
-#ifdef SMPS_EnablePWM
-	inline bool IsPWM(const ChannelID id)
+	inline bool IsDACOrFM(const ChannelID id)
 	{
-		return (std::to_underlying(id) & 0x08) != 0;
+		return std::to_underlying(id) < 0x10;
 	}
-#endif
 
 	inline bool IsDAC(const ChannelID id)
 	{
+		return (std::to_underlying(id) & 0x08) != 0;
+	}
+
+#ifdef SMPS_EnablePWM
+	inline bool IsPWM(const ChannelID id)
+	{
 		return (std::to_underlying(id) & 0x10) != 0;
 	}
+#endif
 
 	inline bool IsPSG(const ChannelID id)
 	{
@@ -115,18 +120,18 @@ namespace SMPS
 
 	inline unsigned int GetFMChannelID(const ChannelID id)
 	{
-		assert(IsFM(id));
+		assert(IsDACOrFM(id));
 		return std::to_underlying(id);
 	}
 
 	inline unsigned int GetFMPort(const ChannelID id)
 	{
-		return (GetFMChannelID(id) & 4) != 0;
+		return GetFMChannelID(id) >= 4;
 	}
 
 	inline unsigned int GetFMSlot(const ChannelID id)
 	{
-		return GetFMChannelID(id) & 3;
+		return GetFMChannelID(id) % 4;
 	}
 
 	inline unsigned int GetPSGChannelID(const ChannelID id)
