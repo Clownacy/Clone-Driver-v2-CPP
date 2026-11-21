@@ -110,7 +110,7 @@ namespace SMPS
 
 	inline bool IsPSG(const ChannelID id)
 	{
-		return (std::to_underlying(id) & 0x80) != 0;
+		return std::to_underlying(id) >= 0x80;
 	}
 
 	inline unsigned int GetFMChannelID(const ChannelID id)
