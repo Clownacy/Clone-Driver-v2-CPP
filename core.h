@@ -138,7 +138,7 @@ namespace SMPS
 	struct Track
 	{
 		unsigned char playback_control;
-		ChannelID voice_control;
+		ChannelID channel_id;
 		unsigned char tempo_divider;
 		signed char transpose;
 		unsigned char volume_attenuation;
@@ -320,11 +320,11 @@ namespace SMPS
 	{
 		auto visitor = VisitHelper{std::forward<Ts>(visitors)...};
 
-		if (voice_control == ChannelID::DAC)
+		if (channel_id == ChannelID::DAC)
 		{
 			return visitor(static_cast<DACTrack&>(*this));
 		}
-		else if (IsPSG(voice_control))
+		else if (IsPSG(channel_id))
 		{
 #ifdef SMPS_EnablePSGNoiseDrums
 			if (IsPSGDrumTrack())
@@ -337,7 +337,7 @@ namespace SMPS
 				return visitor(static_cast<PSGMelodyTrack&>(*this));
 		}
 #ifdef SMPS_EnablePWM
-		else if (IsPWM(voice_control))
+		else if (IsPWM(channel_id))
 		{
 			return visitor(static_cast<PWMTrack&>(*this));
 		}

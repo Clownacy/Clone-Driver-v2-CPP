@@ -64,9 +64,9 @@ static constexpr auto our_lround(const double frequency)
 	return static_cast<long>(frequency + 0.5);
 };
 
-static Track& SFX_BGMChannelRAM(const ChannelID voice_control)
+static Track& SFX_BGMChannelRAM(const ChannelID channel_id)
 {
-	switch (voice_control)
+	switch (channel_id)
 	{
 		default:
 			std::unreachable();
@@ -92,11 +92,11 @@ static Track& SFX_BGMChannelRAM(const ChannelID voice_control)
 	}
 }
 
-static Track& SFX_SFXChannelRAM(const ChannelID voice_control)
+static Track& SFX_SFXChannelRAM(const ChannelID channel_id)
 {
 	State::Tracks::Shared::NonMusicTracks &non_music_tracks = state->tracks.shared.GetNonMusicTracks();
 
-	switch (voice_control)
+	switch (channel_id)
 	{
 		default:
 			std::unreachable();
@@ -272,9 +272,9 @@ static void PlayDACSFX(const unsigned int dac_channel, const unsigned int dac_in
 
 void YM2612Track::WriteFMIorII(Z80BusFMSafe &z80_bus, const unsigned char port, const unsigned char value)
 {
-	const unsigned char complete_port = port | GetFMSlot(voice_control);
+	const unsigned char complete_port = port | GetFMSlot(channel_id);
 
-	switch (GetFMPort(voice_control))
+	switch (GetFMPort(channel_id))
 	{
 		case 0:
 			z80_bus.WriteFMI(complete_port, value);
@@ -590,10 +590,10 @@ bool Track::CoordFlag(const unsigned int flag)
 
 					FMTrack &other_track =
 					#ifdef SMPS_EnableSpecSFX
-						track.voice_control == ChannelID::FM4 && special_fm4.IsPlaying() ? special_fm4 :
+						track.channel_id == ChannelID::FM4 && special_fm4.IsPlaying() ? special_fm4 :
 					#endif
 						// TODO: Get rid of this dumb cast.
-						static_cast<FMTrack&>(SFX_BGMChannelRAM(track.voice_control));
+						static_cast<FMTrack&>(SFX_BGMChannelRAM(track.channel_id));
 
 					if (!other_track.IsPlaying())
 						return;
@@ -611,7 +611,7 @@ bool Track::CoordFlag(const unsigned int flag)
 				[&non_music_tracks](PSGMelodyTrack &track)
 				{
 					// TODO: Get rid of this dumb cast.
-					PSGTrack &other_track = static_cast<PSGTrack&>(SFX_BGMChannelRAM(track.voice_control)); // TODO: Cast to unsigned integer?
+					PSGTrack &other_track = static_cast<PSGTrack&>(SFX_BGMChannelRAM(track.channel_id)); // TODO: Cast to unsigned integer?
 
 					other_track.SetOverridden(false);
 					other_track.SetResting(true);
@@ -631,7 +631,7 @@ bool Track::CoordFlag(const unsigned int flag)
 					other_track.SetOverridden(false);
 					other_track.SetResting(true);
 
-					if (other_track.voice_control == ChannelID::PSGNoise)
+					if (other_track.channel_id == ChannelID::PSGNoise)
 						ClownMDSDK::MainCPU::PSG::Write(other_track.psg_noise);
 				},
 			#ifdef SMPS_EnablePSGNoiseDrums
@@ -660,7 +660,7 @@ bool Track::CoordFlag(const unsigned int flag)
 
 					const bool exit_noise_mode = psg_noise == 0;
 
-					track.voice_control      = exit_noise_mode ? ChannelID::PSG3 : ChannelID::PSGNoise;
+					track.channel_id      = exit_noise_mode ? ChannelID::PSG3 : ChannelID::PSGNoise;
 					const unsigned int value = exit_noise_mode ? 0xFF : track.psg_noise;
 
 					if (!track.IsOverridden())
@@ -685,7 +685,7 @@ bool Track::CoordFlag(const unsigned int flag)
 		{
 			const unsigned char value = *data_pointer++;
 
-			if (!IsPSG(voice_control))
+			if (!IsPSG(channel_id))
 				break;
 
 			voice_index = value;
@@ -1005,7 +1005,7 @@ bool Track::IsMusic() const
 
 bool Track::IsPSG3MelodyTrack() const
 {
-	return GetPSGChannelID(voice_control) >= 0xC0
+	return GetPSGChannelID(channel_id) >= 0xC0
 #ifdef SMPS_EnablePSGNoiseDrums
 		&& !IsPSGDrumTrack()
 #endif
@@ -1248,7 +1248,7 @@ void FMTrack::SilenceChannel(Z80BusFMSafe &z80_bus)
 
 void FMTrack::SendNoteOff(Z80BusFMSafe &z80_bus)
 {
-	z80_bus.WriteFMI(0x28, GetFMChannelID(voice_control));
+	z80_bus.WriteFMI(0x28, GetFMChannelID(channel_id));
 }
 
 void FMTrack::NoteOff(Z80BusFMSafe &z80_bus)
@@ -1388,17 +1388,17 @@ void FMTrack::NoteOn()
 	Z80BusFMSafe::Lock(
 		[&](Z80BusFMSafe &z80_bus)
 		{
-			if (voice_control == ChannelID::FM6 && IsFM6Overridden())
+			if (channel_id == ChannelID::FM6 && IsFM6Overridden())
 			{
 				z80_bus.WriteFMI(0x2B, 0);
 				z80_bus.WriteFMII(0xB6, ams_fms_pan);
 			}
 
-			z80_bus.WriteFMI(0x28, 0xF0 | GetFMChannelID(voice_control));
+			z80_bus.WriteFMI(0x28, 0xF0 | GetFMChannelID(channel_id));
 		}
 	);
 
-	if (voice_control == ChannelID::FM6 && IsFM6Overridden())
+	if (channel_id == ChannelID::FM6 && IsFM6Overridden())
 	{
 		state->tracks.music.FM6().SetFM6Overridden(false);
 		state->tracks.music.dac.SetFM6Overridden(true);
@@ -1504,7 +1504,7 @@ bool PSGTrack::DoNoteOn()
 	if (!value.has_value())
 		return false;
 
-	const ChannelID channel = voice_control == ChannelID::PSGNoise ? ChannelID::PSG3 : voice_control;
+	const ChannelID channel = channel_id == ChannelID::PSGNoise ? ChannelID::PSG3 : channel_id;
 
 	ClownMDSDK::MainCPU::PSG::Write((*value & 0xF) | GetPSGChannelID(channel));
 	ClownMDSDK::MainCPU::PSG::Write((*value & 0x3F0) >> 4);
@@ -1652,14 +1652,14 @@ void PSGTrack::SetVolumeAttenuation(const unsigned int psg_volume_attenuation)
 	if (IsHeld() && note_timeout_master != 0 && note_timeout == 0)
 		return;
 
-	ClownMDSDK::MainCPU::PSG::Write(0x10 | GetPSGChannelID(voice_control) | std::min(0xFU, (psg_volume_attenuation + state->variables.fadein_counter * 4) >> 3));
+	ClownMDSDK::MainCPU::PSG::Write(0x10 | GetPSGChannelID(channel_id) | std::min(0xFU, (psg_volume_attenuation + state->variables.fadein_counter * 4) >> 3));
 }
 
 void PSGTrack::SendNoteOff()
 {
-	ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(voice_control) | 0x1F);
+	ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(channel_id) | 0x1F);
 
-	if (voice_control == ChannelID::PSG3)
+	if (channel_id == ChannelID::PSG3)
 		ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(ChannelID::PSGNoise) | 0x1F); // Silence noise channel.
 }
 
@@ -1805,7 +1805,7 @@ static void InitMusicPlayback()
 	state->tracks.music.Iterate(
 		[&it](Track &track)
 		{
-			track.voice_control = *it++;
+			track.channel_id = *it++;
 		}
 	);
 }
@@ -1933,7 +1933,7 @@ static void Sound_PlayBGM(const unsigned int id)
 				[](Track &track)
 				{
 					if (track.IsPlaying())
-						SFX_BGMChannelRAM(track.voice_control).SetOverridden(true);
+						SFX_BGMChannelRAM(track.channel_id).SetOverridden(true);
 				}
 			);
 
@@ -2056,26 +2056,26 @@ static void Sound_PlaySFX(const unsigned int id)
 
 	for (unsigned int i = 0; i < total_tracks; ++i)
 	{
-		const ChannelID voice_control = static_cast<ChannelID>(track_header[1]);
+		const ChannelID channel_id = static_cast<ChannelID>(track_header[1]);
 
-		SFX_BGMChannelRAM(voice_control).SetOverridden(true);
+		SFX_BGMChannelRAM(channel_id).SetOverridden(true);
 
-		if (IsPSG(voice_control))
+		if (IsPSG(channel_id))
 		{
 			// Silence PSG channel.
-			ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(voice_control) | 0x1F);
+			ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(channel_id) | 0x1F);
 
 			// Silence PSG noise channel if this is PSG3.
-			if (voice_control == ChannelID::PSG3)
+			if (channel_id == ChannelID::PSG3)
 				ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(ChannelID::PSGNoise) | 0x1F);
 		}
 
-		auto &track = SFX_SFXChannelRAM(voice_control);
+		auto &track = SFX_SFXChannelRAM(channel_id);
 
 		track = {};
 
 		track.playback_control = track_header[0];
-		track.voice_control = voice_control;
+		track.channel_id = channel_id;
 		track.tempo_divider = tempo_divider;
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[2])];
 		track.transpose = track_header[4];
@@ -2149,17 +2149,17 @@ static void Sound_PlaySpecial(const unsigned int id)
 
 	for (unsigned int i = 0; i < total_tracks; ++i)
 	{
-		const ChannelID voice_control = static_cast<ChannelID>(track_header[1]);
+		const ChannelID channel_id = static_cast<ChannelID>(track_header[1]);
 
 		Track &track = [&]() -> Track&
 		{
-			if (IsFM(voice_control))
+			if (IsFM(channel_id))
 			{
 				// FM
 				state->tracks.music.FM4().SetOverridden(true);
 				return non_music_tracks.special_sfx.fm4;
 			}
-			else if (IsPSG(voice_control))
+			else if (IsPSG(channel_id))
 			{
 				// PSG
 				state->tracks.music.PSG3().SetOverridden(true);
@@ -2174,7 +2174,7 @@ static void Sound_PlaySpecial(const unsigned int id)
 		track = {};
 
 		track.playback_control = track_header[0];
-		track.voice_control = voice_control;
+		track.channel_id = channel_id;
 		track.tempo_divider = tempo_divider;
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[2])];
 		track.transpose = track_header[4];
@@ -2255,10 +2255,10 @@ static void Sound_PlayCommand(const unsigned int id)
 
 								FMTrack &other_track =
 								#ifdef SMPS_EnableSpecSFX
-									track.voice_control == ChannelID::FM4 && special_fm4.IsPlaying() ? special_fm4 :
+									track.channel_id == ChannelID::FM4 && special_fm4.IsPlaying() ? special_fm4 :
 								#endif
 									// TODO: Get rid of this cast.
-									static_cast<FMTrack&>(SFX_BGMChannelRAM(track.voice_control));
+									static_cast<FMTrack&>(SFX_BGMChannelRAM(track.channel_id));
 
 								if (other_track.IsOverridden())
 								{
@@ -2278,7 +2278,7 @@ static void Sound_PlayCommand(const unsigned int id)
 								track.NoteOff();
 
 								// TODO: Get rid of this cast.
-								PSGMelodyTrack &other_track = static_cast<PSGMelodyTrack&>(SFX_BGMChannelRAM(track.voice_control));
+								PSGMelodyTrack &other_track = static_cast<PSGMelodyTrack&>(SFX_BGMChannelRAM(track.channel_id));
 
 								if (other_track.IsOverridden())
 								{
@@ -2311,7 +2311,7 @@ static void Sound_PlayCommand(const unsigned int id)
 									other_track.SetOverridden(false);
 									other_track.SetResting(true);
 
-									if (other_track.voice_control == ChannelID::PSGNoise)
+									if (other_track.channel_id == ChannelID::PSGNoise)
 										ClownMDSDK::MainCPU::PSG::Write(other_track.psg_noise);
 								}
 							}
@@ -2376,7 +2376,7 @@ static void Sound_PlayCommand(const unsigned int id)
 							music_psg3.SetResting(true);
 
 							if (music_psg3.IsPlaying())
-								if (music_psg3.voice_control == ChannelID::PSGNoise)
+								if (music_psg3.channel_id == ChannelID::PSGNoise)
 									ClownMDSDK::MainCPU::PSG::Write(music_psg3.psg_noise);
 						}
 					}
@@ -2568,7 +2568,7 @@ static void UpdateMusic()
 					track.SetResting(true);
 					track.NoteOff();
 
-					if (track.voice_control == ChannelID::PSGNoise)
+					if (track.channel_id == ChannelID::PSGNoise)
 						ClownMDSDK::MainCPU::PSG::Write(track.psg_noise);
 				}
 			},
