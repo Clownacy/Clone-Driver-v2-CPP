@@ -145,6 +145,16 @@ static Track& GetSFXTrackForSFXChannel(const ChannelID channel_id)
 // Non-Track //
 ///////////////
 
+static void DACSilenceAll(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+{
+#ifdef __MEGA_DRIVE__
+	z80_bus.RAM(zRequestFlag) = z80_scf_instruction;
+	// 'Stop PCM channel' command value
+	z80_bus.RAM(zRequestChannel1) = 2;
+	z80_bus.RAM(zRequestChannel2) = 2;
+#endif
+}
+
 static void FMSilenceAll(Z80BusFMSafe &z80_bus)
 {
 	// Send key-off to all channels.
@@ -190,13 +200,7 @@ static void PSGSilenceAll()
 
 static void SilenceAll(Z80BusFMSafe &z80_bus)
 {
-#ifdef __MEGA_DRIVE__
-	z80_bus.RAM(zRequestFlag) = z80_scf_instruction;
-	// 'Stop PCM channel' command value
-	z80_bus.RAM(zRequestChannel1) = 2;
-	z80_bus.RAM(zRequestChannel2) = 2;
-#endif
-
+	DACSilenceAll(z80_bus);
 	FMSilenceAll(z80_bus);
 	PSGSilenceAll();
 #ifdef SMPS_EnablePWM
@@ -2575,6 +2579,9 @@ static void UpdateMusic()
 
 		// Mark music tracks as resting and update the sound hardware to suit them.
 		state->tracks.music.IterateWithZ80Bus(VisitHelper(
+		#ifdef SMPS_EnablePWM
+			[](PWMTrack&) {},
+		#endif
 			[](DACTrack &track, Z80BusFMSafe &z80_bus)
 			{
 				if (track.IsPlaying())
@@ -2606,12 +2613,7 @@ static void UpdateMusic()
 					if (track.channel_id == ChannelID::PSGNoise)
 						ClownMDSDK::MainCPU::PSG::Write(track.psg_noise);
 				}
-			},
-		#ifdef SMPS_EnablePWM
-			[](PWMTrack&) {},
-		#endif
-			[](DACTrack&) {},
-			[](FMTrack&) {}
+			}
 		));
 
 		state->tracks.music.dac.SetFM6Overridden(true);
@@ -2631,6 +2633,9 @@ static void DoFadeIn()
 	state->variables.fadein_delay = 2;
 
 	state->tracks.IterateWithZ80Bus(VisitHelper(
+	#ifdef SMPS_EnablePWM
+		[](PWMTrack&) {},
+	#endif
 		[](DACTrack &track, Z80BusFMSafe &z80_bus)
 		{
 			if (track.IsPlaying())
@@ -2650,12 +2655,7 @@ static void DoFadeIn()
 				if (track.voice_index == 0)
 					track.SetVolumeAttenuation(track.volume_attenuation);
 			}
-		},
-	#ifdef SMPS_EnablePWM
-		[](PWMTrack&) {},
-	#endif
-		[](DACTrack&) {},
-		[](FMTrack&) {}
+		}
 	));
 }
 
@@ -2676,6 +2676,21 @@ static void DoFadeOut()
 	state->variables.fadeout_delay = 3;
 
 	state->tracks.music.IterateWithZ80Bus(VisitHelper(
+	#ifdef SMPS_EnablePWM
+		[](PWMTrack&) {},
+	#endif
+	#ifdef SMPS_EnablePSGNoiseDrums
+		[](PSGDrumTrack &track)
+		{
+			if (track.IsPlaying())
+			{
+				state->variables.psg_drum_volume += 4;
+
+				if (state->variables.psg_drum_volume >= 0x80)
+					track.SetPlaying(false);
+			}
+		},
+	#endif
 		[](DACTrack &track, Z80BusFMSafe &z80_bus)
 		{
 			if (track.IsPlaying())
@@ -2718,24 +2733,7 @@ static void DoFadeOut()
 						track.SetVolumeAttenuation(track.volume_attenuation);
 				}
 			}
-		},
-	#ifdef SMPS_EnablePSGNoiseDrums
-		[](PSGDrumTrack &track)
-		{
-			if (track.IsPlaying())
-			{
-				state->variables.psg_drum_volume += 4;
-
-				if (state->variables.psg_drum_volume >= 0x80)
-					track.SetPlaying(false);
-			}
-		},
-	#endif
-	#ifdef SMPS_EnablePWM
-		[](PWMTrack&) {},
-	#endif
-		[](DACTrack&) {},
-		[](FMTrack&) {}
+		}
 	));
 }
 
