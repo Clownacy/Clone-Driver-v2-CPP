@@ -16,7 +16,7 @@
 #define SMPS_PushSFXBehaviour
 #define SMPS_EnableContSFX
 #define SMPS_EnableUniversalVoiceBank
-//#define SMPS_EnablePSGNoiseDrums
+#define SMPS_EnablePSGNoiseDrums
 
 namespace SMPS
 {
