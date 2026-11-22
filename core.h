@@ -148,7 +148,7 @@ namespace SMPS
 		unsigned short freq;
 		signed char detune;
 
-		unsigned char stack_index;
+		unsigned char return_stack_index;
 
 		unsigned char duration_timeout;
 		unsigned char saved_duration;
@@ -168,8 +168,8 @@ namespace SMPS
 
 		union
 		{
-			std::array<const unsigned char*, 3> go_sub_stack;
-			std::array<unsigned char, sizeof(go_sub_stack)> loop_counters;
+			std::array<const unsigned char*, 3> return_stack;
+			std::array<unsigned char, sizeof(return_stack)> loop_counters;
 		};
 
 		// Generic
