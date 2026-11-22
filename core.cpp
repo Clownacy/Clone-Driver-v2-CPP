@@ -1778,7 +1778,7 @@ void PSGDrumTrack::UpdateTrackInternal(const bool begin_new_note)
 // Other //
 ///////////
 
-static void InitMusicPlayback()
+static void ResetMusicRAM()
 {
 	// Save several values.
 	const auto sndprio = state->variables.sndprio;
@@ -1795,26 +1795,11 @@ static void InitMusicPlayback()
 	state->variables.fadein_counter = fadein_counter;
 	state->variables.queue = queue;
 
-	// Clear music track RAM.
-	state->tracks.music.Iterate(
-		[](Track &track)
-		{
-			track = {};
-		}
-	);
-
 	// Reset DAC volume.
 	WriteDACVolumeAttenuation(0, 0);
 
-	// InitMusicPlayback, and Sound_PlayBGM for that matter,
-	// don't do a very good job of setting up the music tracks.
-	// Tracks that aren't defined in a music file's header don't have
-	// their channels defined, meaning .sendfmnoteoff won't silence
-	// hardware properly. In combination with removing the below
-	// calls to FMSilenceAll/PSGSilenceAll, this will cause hanging
-	// notes.
-	// To fix this, we'll just forcefully set all channels, here:
-	static constexpr auto ChannelInitBytes = std::to_array<ChannelID>({
+	// Reset music track RAM.
+	static constexpr auto channel_ids = std::to_array<ChannelID>({
 		ChannelID::DAC, ChannelID::FM1, ChannelID::FM2, ChannelID::FM3, ChannelID::FM4, ChannelID::FM5, ChannelID::FM6,
 		ChannelID::PSG1, ChannelID::PSG2, ChannelID::PSG3,
 	#ifdef SMPS_EnablePSGNoiseDrums
@@ -1825,10 +1810,11 @@ static void InitMusicPlayback()
 	#endif
 	});
 
-	auto it = std::begin(ChannelInitBytes);
+	auto it = std::begin(channel_ids);
 	state->tracks.music.Iterate(
 		[&it](Track &track)
 		{
+			track = {};
 			track.channel_id = *it++;
 		}
 	);
@@ -1855,9 +1841,8 @@ static void Sound_PlayBGM(const unsigned int id)
 			state->tracks.shared.DestroyMusicBackup();
 	}
 
-	InitMusicPlayback();
+	ResetMusicRAM();
 
-	const unsigned char* const header = music.data;
 	state->variables.speeduptempo = music.speed_up_tempo;
 
 	if (music.slower_tempo_on_pal)
@@ -1865,6 +1850,8 @@ static void Sound_PlayBGM(const unsigned int id)
 
 	if (music.ignore_speedup)
 		state->variables.ignore_speedup = true;
+
+	const unsigned char* const header = music.data;
 
 	const auto voices_offset = ReadAlignedSignedWord(&header[0]);
 	state->variables.music_voices =
@@ -1889,6 +1876,7 @@ static void Sound_PlayBGM(const unsigned int id)
 	state->variables.main_tempo_timeout = 0;
 	state->variables.pal_audio_countdown = 5;
 
+	// Initialise DAC & FM tracks.
 	const auto &DoDACOrFM = [&](YM2612Track &track)
 	{
 		track.SetPlaying(true);
@@ -1914,6 +1902,7 @@ static void Sound_PlayBGM(const unsigned int id)
 	state->tracks.music.dac.SetFM6Overridden(true);
 	state->tracks.music.FM6().SetFM6Overridden(true);
 
+	// Initialise PSG tracks.
 	for (unsigned int i = 0; i < total_psg_tracks; ++i)
 	{
 		Track &track = state->tracks.music.PSG(i);
@@ -1933,6 +1922,7 @@ static void Sound_PlayBGM(const unsigned int id)
 		track_header += 6;
 	}
 
+	// Initialise PWM tracks.
 #ifdef SMPS_EnablePWM
 	for (unsigned int i = 0; i < total_pwm_tracks; ++i)
 	{
@@ -1950,6 +1940,7 @@ static void Sound_PlayBGM(const unsigned int id)
 	}
 #endif
 
+	// SFX have priority over music, so mark music tracks as overridden if equivalent SFX tracks are playing.
 	state->tracks.shared.VisitNonMusicTracks(
 		[](auto &non_music_tracks)
 		{
@@ -1971,6 +1962,7 @@ static void Sound_PlayBGM(const unsigned int id)
 		}
 	);
 
+	// Mute channels, to end any previous sound they were making.
 	state->tracks.music.IterateWithZ80Bus(VisitHelper(
 		[](FMTrack &track, Z80BusFMSafe &z80_bus)
 		{
@@ -2112,29 +2104,33 @@ static void Sound_PlaySFX(const unsigned int id)
 		track.stack_pointer = track.go_sub_stack.size();
 
 		track.Visit(
-			[](DACTrack &dac_track)
-			{
-				dac_track.ams_fms_pan = 0xC0;
-			},
 			[&voices](FMSFXTrack &fm_track)
 			{
 				fm_track.ams_fms_pan = 0xC0;
 				fm_track.voices = voices;
 			},
-			[&voices](FMMusicTrack&)
+			[](PSGTrack&) {},
+		#ifdef SMPS_EnablePWM
+			[](PWMTrack&)
 			{
 				std::unreachable();
 			},
-		#ifdef SMPS_EnablePWM
-			[](PWMTrack&) {},
 		#endif
-			[](PSGTrack&) {}
+			[](DACTrack&)
+			{
+				std::unreachable();
+			},
+			[](FMMusicTrack&)
+			{
+				std::unreachable();
+			}
 		);
 
 		track_header += 6;
 	}
 
 #ifdef SMPS_EnableSpecSFX
+	// SFX have priority over special SFX, so mark special SFX tracks as overridden if equivalent SFX tracks are playing.
 	State::Tracks::Shared::NonMusicTracks &non_music_tracks = state->tracks.shared.GetNonMusicTracks();
 
 	if (non_music_tracks.sfx.FM4().IsPlaying())
@@ -2175,15 +2171,14 @@ static void Sound_PlaySpecial(const unsigned int id)
 
 		Track &track = [&]() -> Track&
 		{
-			if (IsFM(channel_id))
+			// Special SFX override music tracks.
+			if (channel_id == ChannelID::FM4)
 			{
-				// FM
 				state->tracks.music.FM4().SetOverridden(true);
 				return non_music_tracks.special_sfx.fm4;
 			}
-			else if (IsPSG(channel_id))
+			else if (channel_id == ChannelID::PSG3)
 			{
-				// PSG
 				state->tracks.music.PSG3().SetOverridden(true);
 				return non_music_tracks.special_sfx.psg3;
 			}
@@ -2205,36 +2200,40 @@ static void Sound_PlaySpecial(const unsigned int id)
 		track.stack_pointer = track.go_sub_stack.size();
 
 		track.Visit(
-			[&voices](DACTrack &dac_track)
-			{
-				dac_track.ams_fms_pan = 0xC0;
-			},
 			[&voices](FMSFXTrack &fm_track)
 			{
 				fm_track.ams_fms_pan = 0xC0;
 				fm_track.voices = voices;
 			},
-			[&voices](FMMusicTrack&)
+			[](PSGTrack&) {},
+		#ifdef SMPS_EnablePWM
+			[](PWMTrack&)
 			{
 				std::unreachable();
 			},
-		#ifdef SMPS_EnablePWM
-			[](PWMTrack&) {},
 		#endif
-			[](PSGTrack&) {}
-
+			[](DACTrack&)
+			{
+				std::unreachable();
+			},
+			[](FMMusicTrack&)
+			{
+				std::unreachable();
+			}
 		);
 
 		track_header += 6;
 	}
 
+	// SFX have priority over special SFX, so mark special SFX tracks as overridden if equivalent SFX tracks are playing.
 	if (non_music_tracks.sfx.FM4().IsPlaying())
 		non_music_tracks.special_sfx.fm4.SetOverridden(true);
 
 	if (non_music_tracks.sfx.PSG3().IsPlaying())
+	{
 		non_music_tracks.special_sfx.psg3.SetOverridden(true);
-
-	if (!non_music_tracks.sfx.PSG3().IsPlaying())
+	}
+	else
 	{
 		SilencePSGChannel(ChannelID::PSG3);
 		SilencePSGChannel(ChannelID::PSGNoise);
