@@ -148,7 +148,7 @@ namespace SMPS
 		unsigned short freq;
 		signed char detune;
 
-		unsigned char stack_pointer;
+		unsigned char stack_index;
 
 		unsigned char duration_timeout;
 		unsigned char saved_duration;

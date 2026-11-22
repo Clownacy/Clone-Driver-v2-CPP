@@ -408,7 +408,7 @@ bool Track::CoordFlag(const unsigned int flag)
 			break;
 
 		case 3: // cfJumpReturn
-			data_pointer = go_sub_stack[stack_pointer++];
+			data_pointer = go_sub_stack[stack_index++];
 			break;
 
 		case 4: // cfFadeInToPrevious
@@ -747,7 +747,7 @@ bool Track::CoordFlag(const unsigned int flag)
 			const signed int offset = ReadUnalignedSignedWord(data_pointer);
 			data_pointer += 2;
 
-			go_sub_stack[--stack_pointer] = data_pointer;
+			go_sub_stack[--stack_index] = data_pointer;
 			data_pointer += offset;
 			break;
 		}
@@ -1893,7 +1893,7 @@ static void Sound_PlayBGM(const unsigned int id)
 	{
 		track.SetPlaying(true);
 		track.tempo_divider = tempo_divider;
-		track.stack_pointer = track.go_sub_stack.size();
+		track.stack_index = track.go_sub_stack.size();
 		track.ams_fms_pan = 0xC0;
 		track.duration_timeout = 1;
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
@@ -1916,7 +1916,7 @@ static void Sound_PlayBGM(const unsigned int id)
 	{
 		track.SetPlaying(true);
 		track.tempo_divider = tempo_divider;
-		track.stack_pointer = track.go_sub_stack.size();
+		track.stack_index = track.go_sub_stack.size();
 		track.duration_timeout = 1;
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
 		track.transpose = track_header[2];
@@ -1946,7 +1946,7 @@ static void Sound_PlayBGM(const unsigned int id)
 
 		track.SetPlaying(true);
 		track.tempo_divider = tempo_divider;
-		track.stack_pointer = track.go_sub_stack.size();
+		track.stack_index = track.go_sub_stack.size();
 		track.duration_timeout = 1;
 		track.data_pointer = &header[ReadAlignedSignedWord(&track_header[0])];
 		track.transpose = track_header[2];
@@ -2117,7 +2117,7 @@ static void Sound_PlaySFX(const unsigned int id)
 			track.transpose += state->spindash_pitch;
 #endif
 
-		track.stack_pointer = track.go_sub_stack.size();
+		track.stack_index = track.go_sub_stack.size();
 
 		track.Visit(
 			[&voices](FMSFXTrack &fm_track)
@@ -2213,7 +2213,7 @@ static void Sound_PlaySpecial(const unsigned int id)
 		track.transpose = track_header[4];
 		track.volume_attenuation = track_header[5];
 		track.duration_timeout = 1;
-		track.stack_pointer = track.go_sub_stack.size();
+		track.stack_index = track.go_sub_stack.size();
 
 		track.Visit(
 			[&voices](FMSFXTrack &fm_track)
