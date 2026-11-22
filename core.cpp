@@ -1870,7 +1870,7 @@ static void Sound_PlayBGM(const unsigned int id)
 
 	const unsigned int total_dac_and_fm_tracks = header[2];
 	const unsigned int has_dac_track = total_dac_and_fm_tracks != 0;
-	const unsigned int total_fm_tracks = total_dac_and_fm_tracks - 1;
+	const unsigned int total_fm_tracks = total_dac_and_fm_tracks == 0 ? 0 : total_dac_and_fm_tracks - 1;
 	const unsigned int total_psg_tracks = header[3];
 	const unsigned int total_psg_melody_tracks = std::min(3U, total_psg_tracks);
 #ifdef SMPS_EnablePSGNoiseDrums
