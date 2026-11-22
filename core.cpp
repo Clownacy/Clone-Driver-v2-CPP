@@ -64,7 +64,7 @@ static constexpr auto our_lround(const double frequency)
 	return static_cast<long>(frequency + 0.5);
 };
 
-static Track& SFX_BGMChannelRAM(const ChannelID channel_id)
+static FMTrack& GetFMMusicTrackForSFXChannel(const ChannelID channel_id)
 {
 	switch (channel_id)
 	{
@@ -79,6 +79,15 @@ static Track& SFX_BGMChannelRAM(const ChannelID channel_id)
 
 		case ChannelID::FM5:
 			return state->tracks.music.FM5();
+	}
+}
+
+static PSGMelodyTrack& GetPSGMusicTrackForSFXChannel(const ChannelID channel_id)
+{
+	switch (channel_id)
+	{
+		default:
+			std::unreachable();
 
 		case ChannelID::PSG1:
 			return state->tracks.music.PSG1();
@@ -92,7 +101,17 @@ static Track& SFX_BGMChannelRAM(const ChannelID channel_id)
 	}
 }
 
-static Track& SFX_SFXChannelRAM(const ChannelID channel_id)
+static Track& GetMusicTrackForSFXChannel(const ChannelID channel_id)
+{
+	if (IsPSG(channel_id))
+		return GetPSGMusicTrackForSFXChannel(channel_id);
+	else if (IsFM(channel_id))
+		return GetFMMusicTrackForSFXChannel(channel_id);
+	else
+		std::unreachable();
+}
+
+static Track& GetSFXTrackForSFXChannel(const ChannelID channel_id)
 {
 	State::Tracks::Shared::NonMusicTracks &non_music_tracks = state->tracks.shared.GetNonMusicTracks();
 
@@ -592,8 +611,7 @@ bool Track::CoordFlag(const unsigned int flag)
 					#ifdef SMPS_EnableSpecSFX
 						track.channel_id == ChannelID::FM4 && special_fm4.IsPlaying() ? special_fm4 :
 					#endif
-						// TODO: Get rid of this dumb cast.
-						static_cast<FMTrack&>(SFX_BGMChannelRAM(track.channel_id));
+						GetFMMusicTrackForSFXChannel(track.channel_id);
 
 					if (!other_track.IsPlaying())
 						return;
@@ -610,8 +628,7 @@ bool Track::CoordFlag(const unsigned int flag)
 				},
 				[&non_music_tracks](PSGMelodyTrack &track)
 				{
-					// TODO: Get rid of this dumb cast.
-					PSGTrack &other_track = static_cast<PSGTrack&>(SFX_BGMChannelRAM(track.channel_id)); // TODO: Cast to unsigned integer?
+					PSGTrack &other_track = GetPSGMusicTrackForSFXChannel(track.channel_id);
 
 					other_track.SetOverridden(false);
 					other_track.SetResting(true);
@@ -1933,7 +1950,7 @@ static void Sound_PlayBGM(const unsigned int id)
 				[](Track &track)
 				{
 					if (track.IsPlaying())
-						SFX_BGMChannelRAM(track.channel_id).SetOverridden(true);
+						GetMusicTrackForSFXChannel(track.channel_id).SetOverridden(true);
 				}
 			);
 
@@ -2058,7 +2075,7 @@ static void Sound_PlaySFX(const unsigned int id)
 	{
 		const ChannelID channel_id = static_cast<ChannelID>(track_header[1]);
 
-		SFX_BGMChannelRAM(channel_id).SetOverridden(true);
+		GetMusicTrackForSFXChannel(channel_id).SetOverridden(true);
 
 		if (IsPSG(channel_id))
 		{
@@ -2070,7 +2087,7 @@ static void Sound_PlaySFX(const unsigned int id)
 				ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(ChannelID::PSGNoise) | 0x1F);
 		}
 
-		auto &track = SFX_SFXChannelRAM(channel_id);
+		auto &track = GetSFXTrackForSFXChannel(channel_id);
 
 		track = {};
 
@@ -2257,8 +2274,7 @@ static void Sound_PlayCommand(const unsigned int id)
 								#ifdef SMPS_EnableSpecSFX
 									track.channel_id == ChannelID::FM4 && special_fm4.IsPlaying() ? special_fm4 :
 								#endif
-									// TODO: Get rid of this cast.
-									static_cast<FMTrack&>(SFX_BGMChannelRAM(track.channel_id));
+									GetFMMusicTrackForSFXChannel(track.channel_id);
 
 								if (other_track.IsOverridden())
 								{
@@ -2277,8 +2293,7 @@ static void Sound_PlayCommand(const unsigned int id)
 
 								track.NoteOff();
 
-								// TODO: Get rid of this cast.
-								PSGMelodyTrack &other_track = static_cast<PSGMelodyTrack&>(SFX_BGMChannelRAM(track.channel_id));
+								PSGMelodyTrack &other_track = GetPSGMusicTrackForSFXChannel(track.channel_id);
 
 								if (other_track.IsOverridden())
 								{
