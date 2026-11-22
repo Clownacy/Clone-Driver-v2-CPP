@@ -173,13 +173,19 @@ static void FMSilenceAll(Z80BusFMSafe &z80_bus)
 	}
 }
 
+static void SilencePSGChannel(const ChannelID channel_id)
+{
+	// Set channel to maximum attenuation.
+	ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(channel_id) | 0x1F);
+}
+
 static void PSGSilenceAll()
 {
 	// Set all channels to maximum attenuation.
-	ClownMDSDK::MainCPU::PSG::Write(0x80 | 0x1F); // PSG1
-	ClownMDSDK::MainCPU::PSG::Write(0xA0 | 0x1F); // PSG2
-	ClownMDSDK::MainCPU::PSG::Write(0xC0 | 0x1F); // PSG3
-	ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F); // PSG Noise
+	SilencePSGChannel(ChannelID::PSG1);
+	SilencePSGChannel(ChannelID::PSG2);
+	SilencePSGChannel(ChannelID::PSG3);
+	SilencePSGChannel(ChannelID::PSGNoise);
 }
 
 static void SilenceAll(Z80BusFMSafe &z80_bus)
@@ -1674,10 +1680,11 @@ void PSGTrack::SetVolumeAttenuation(const unsigned int psg_volume_attenuation)
 
 void PSGTrack::SendNoteOff()
 {
-	ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(channel_id) | 0x1F);
+	SilencePSGChannel(channel_id);
 
+	// Since the PSG3 track controls the noise channel, mute them both.
 	if (channel_id == ChannelID::PSG3)
-		ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(ChannelID::PSGNoise) | 0x1F); // Silence noise channel.
+		SilencePSGChannel(ChannelID::PSGNoise);
 }
 
 void PSGTrack::NoteOff()
@@ -2079,12 +2086,10 @@ static void Sound_PlaySFX(const unsigned int id)
 
 		if (IsPSG(channel_id))
 		{
-			// Silence PSG channel.
-			ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(channel_id) | 0x1F);
+			SilencePSGChannel(channel_id);
 
-			// Silence PSG noise channel if this is PSG3.
 			if (channel_id == ChannelID::PSG3)
-				ClownMDSDK::MainCPU::PSG::Write(GetPSGChannelID(ChannelID::PSGNoise) | 0x1F);
+				SilencePSGChannel(ChannelID::PSGNoise);
 		}
 
 		auto &track = GetSFXTrackForSFXChannel(channel_id);
@@ -2231,8 +2236,8 @@ static void Sound_PlaySpecial(const unsigned int id)
 
 	if (!non_music_tracks.sfx.PSG3().IsPlaying())
 	{
-		ClownMDSDK::MainCPU::PSG::Write(0xC0 | 0x1F);
-		ClownMDSDK::MainCPU::PSG::Write(0xE0 | 0x1F);
+		SilencePSGChannel(ChannelID::PSG3);
+		SilencePSGChannel(ChannelID::PSGNoise);
 	}
 }
 #endif
