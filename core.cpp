@@ -658,15 +658,21 @@ bool Track::CoordFlag(const unsigned int flag)
 						ClownMDSDK::MainCPU::PSG::Write(other_track.psg_noise);
 				},
 			#ifdef SMPS_EnablePSGNoiseDrums
-				[&non_music_tracks](PSGDrumTrack &track)
+				[](PSGDrumTrack&)
 				{
 					std::unreachable();
 				},
 			#endif
 			#ifdef SMPS_EnablePWM
-				[](PWMTrack&) {},
+				[](PWMTrack&)
+				{
+					std::unreachable();
+				},
 			#endif
-				[](DACTrack&) {}
+				[](DACTrack&)
+				{
+					std::unreachable();
+				}
 			);
 
 			return false;
@@ -1863,7 +1869,13 @@ static void Sound_PlayBGM(const unsigned int id)
 		reinterpret_cast<const Voice*>(&header[voices_offset]);
 
 	const unsigned int total_dac_and_fm_tracks = header[2];
+	const unsigned int has_dac_track = total_dac_and_fm_tracks != 0;
+	const unsigned int total_fm_tracks = total_dac_and_fm_tracks - 1;
 	const unsigned int total_psg_tracks = header[3];
+	const unsigned int total_psg_melody_tracks = std::min(3U, total_psg_tracks);
+#ifdef SMPS_EnablePSGNoiseDrums
+	const unsigned int has_psg_drum_track = total_psg_tracks > 3;
+#endif
 #ifdef SMPS_EnablePWM
 	const unsigned int total_pwm_tracks = header[4];
 #endif
@@ -1891,22 +1903,17 @@ static void Sound_PlayBGM(const unsigned int id)
 		track_header += 4;
 	};
 
-	for (unsigned int i = 0; i < total_dac_and_fm_tracks; ++i)
-	{
-		if (i == 0)
-			DoDACOrFM(state->tracks.music.dac);
-		else
-			DoDACOrFM(state->tracks.music.fm[i - 1]);
-	}
+	if (has_dac_track)
+		DoDACOrFM(state->tracks.music.dac);
+
+	for (unsigned int i = 0; i < total_fm_tracks; ++i)
+		DoDACOrFM(state->tracks.music.fm[i]);
 
 	state->tracks.music.dac.SetFM6Overridden(true);
 	state->tracks.music.FM6().SetFM6Overridden(true);
 
-	// Initialise PSG tracks.
-	for (unsigned int i = 0; i < total_psg_tracks; ++i)
+	const auto &DoPSG = [&](PSGTrack &track)
 	{
-		Track &track = state->tracks.music.PSG(i);
-
 		track.SetPlaying(true);
 		track.tempo_divider = tempo_divider;
 		track.stack_pointer = track.go_sub_stack.size();
@@ -1920,7 +1927,16 @@ static void Sound_PlayBGM(const unsigned int id)
 		track.voice_index = track_header[5];
 
 		track_header += 6;
-	}
+	};
+
+	// Initialise PSG tracks.
+	for (unsigned int i = 0; i < total_psg_melody_tracks; ++i)
+		DoPSG(state->tracks.music.PSG(i));
+
+#ifdef SMPS_EnablePSGNoiseDrums
+	if (has_psg_drum_track)
+		DoPSG(state->tracks.music.psg_drum);
+#endif
 
 	// Initialise PWM tracks.
 #ifdef SMPS_EnablePWM

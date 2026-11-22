@@ -510,7 +510,7 @@ namespace SMPS
 				auto& PSG1() { return psg1; }
 				auto& PSG2() { return psg2; }
 				auto& PSG3() { return psg3; }
-				Track& PSG(const unsigned int index)
+				PSGMelodyTrack& PSG(const unsigned int index)
 				{
 					switch (index)
 					{
