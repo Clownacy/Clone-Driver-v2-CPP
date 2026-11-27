@@ -2242,19 +2242,18 @@ static void Sound_PlaySpecial(const unsigned int id)
 		Track &track = [&]() -> Track&
 		{
 			// Special SFX override music tracks.
-			if (channel_id == ChannelID::FM4)
+			switch (channel_id)
 			{
-				state->tracks.music.FM4().SetOverridden(true);
-				return non_music_tracks.special_sfx.fm4;
-			}
-			else if (channel_id == ChannelID::PSG3)
-			{
-				state->tracks.music.PSG3().SetOverridden(true);
-				return non_music_tracks.special_sfx.psg3;
-			}
-			else
-			{
-				std::unreachable();
+				default:
+					std::unreachable();
+
+				case ChannelID::FM4:
+					state->tracks.music.FM4().SetOverridden(true);
+					return non_music_tracks.special_sfx.fm4;
+
+				case ChannelID::PSG3:
+					state->tracks.music.PSG3().SetOverridden(true);
+					return non_music_tracks.special_sfx.psg3;
 			}
 		}();
 
