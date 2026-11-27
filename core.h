@@ -4,6 +4,7 @@
 #include <array>
 #include <cassert>
 #include <optional>
+#include <utility>
 
 #include <clownmdsdk.h>
 
@@ -824,7 +825,8 @@ namespace SMPS
 	};
 
 	#ifndef BINARY_BLOB
-	extern const Data* const data;
+	extern State* const state;
+	extern const Data data;
 	#endif
 
 	void UpdateDriver();
