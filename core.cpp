@@ -686,7 +686,7 @@ bool Track::CoordFlag(const unsigned int flag)
 						}
 					);
 				},
-				[&non_music_tracks](PSGMelodyTrack &track)
+				[](PSGMelodyTrack &track)
 				{
 					PSGTrack &other_track = GetPSGMusicTrackForSFXChannel(track.channel_id);
 
