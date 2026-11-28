@@ -761,6 +761,7 @@ namespace SMPS
 	};
 #endif
 
+#ifdef __MEGA_DRIVE__
 	struct DACSample
 	{
 		struct
@@ -775,6 +776,7 @@ namespace SMPS
 		} playback_increment;
 		unsigned char bank_index;
 	};
+#endif
 
 #ifdef SMPS_EnablePSGNoiseDrums
 	struct PSGNoiseDrum
@@ -806,7 +808,7 @@ namespace SMPS
 #endif
 		struct
 		{
-			const DACSample *list;
+			const struct DACSample *list;
 			unsigned short begin, end;
 		} dac;
 		struct

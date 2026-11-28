@@ -156,16 +156,11 @@ namespace DACDriver
 	{
 		bus.RAM(zRequestFlag) = 0x37; // Z80 'SCF' instruction.
 	}
-#endif
 
-	static const DACSample& GetSampleMetadata(const unsigned int id)
+	static void SendSampleRequest(ClownMDSDK::MainCPU::Z80::Bus &bus, const unsigned int channel, const unsigned int id)
 	{
-		return data.dac.list[id];
-	}
+		const DACSample &sample = data.dac.list[id];
 
-	static void SendSampleRequest(ClownMDSDK::MainCPU::Z80::Bus &bus, const unsigned int channel, const DACSample &sample)
-	{
-	#ifdef __MEGA_DRIVE__
 		// TODO: Assembly?
 		const unsigned int offset = channel != 0 ? zRequestChannel2 : zRequestChannel1;
 
@@ -178,75 +173,33 @@ namespace DACDriver
 		bus.RAM(offset + 5) = sample.bank_index;
 
 		MarkRequestSubmitted(bus);
-	#endif
 	}
 
 	static void WriteVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigned int channel, const unsigned int volume_attenuation)
 	{
-	#ifdef __MEGA_DRIVE__
 		z80_bus.RAM(channel != 0 ? zSample2Volume : zSample1Volume) = volume_attenuation | zSampleLookup >> 8;
-	#endif
-	}
-
-	static void WriteVolumeAttenuation(const unsigned int channel, const unsigned int volume_attenuation)
-	{
-		ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
-			[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
-			{
-				WriteVolumeAttenuation(z80_bus, channel, volume_attenuation);
-			}
-		);
-	}
-
-	static void PlaySFX(const unsigned int dac_channel, const unsigned int dac_index)
-	{
-		state->tracks.music.dac.SetFM6Overridden(true);
-		state->tracks.music.FM6().SetFM6Overridden(true);
-
-		const auto &sample = GetSampleMetadata(dac_index);
-
-		Z80BusFMSafe::Lock(
-			[&](Z80BusFMSafe &z80_bus)
-			{
-				// Enable DAC.
-				z80_bus.WriteFMI(0x2B, 0x80);
-
-				// Force L/R panning.
-				z80_bus.WriteFMII(0xB6, 0xC0);
-
-				SendSampleRequest(z80_bus, dac_channel, sample);
-
-				// This is a DAC SFX: set to full volume
-				WriteVolumeAttenuation(z80_bus, dac_channel, 0);
-			}
-		);
 	}
 
 	static void Pause(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 	{
-	#ifdef __MEGA_DRIVE__
 		const auto command = std::to_underlying(Command::Stop);
 		z80_bus.RAM(zRequestChannel1) = command;
 		z80_bus.RAM(zRequestChannel2) = command;
 
 		MarkRequestSubmitted(z80_bus);
-	#endif
 	}
 
 	static void Unpause(ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 	{
-	#ifdef __MEGA_DRIVE__
 		const auto command = std::to_underlying(Command::Play);
 		z80_bus.RAM(zRequestChannel1) = command;
 		z80_bus.RAM(zRequestChannel2) = command;
 
 		MarkRequestSubmitted(z80_bus);
-	#endif
 	}
 
 	static void StopSFX()
 	{
-	#ifdef __MEGA_DRIVE__
 		ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
 			[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
 			{
@@ -255,8 +208,14 @@ namespace DACDriver
 				MarkRequestSubmitted(z80_bus);
 			}
 		);
-	#endif
 	}
+#else
+	void SendSampleRequest(ClownMDSDK::MainCPU::Z80::Bus &bus, const unsigned int channel, const unsigned int id);
+	void WriteVolumeAttenuation(ClownMDSDK::MainCPU::Z80::Bus &z80_bus, const unsigned int channel, const unsigned int volume_attenuation);
+	void Pause(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+	void Unpause(ClownMDSDK::MainCPU::Z80::Bus &z80_bus);
+	void StopSFX();
+#endif
 }
 
 ///////////////
@@ -341,6 +300,28 @@ static void StopAllSound()
 			z80_bus.WriteFMI(0x27, 0);
 
 			SilenceAll(z80_bus);
+		}
+	);
+}
+
+static void PlayDACSFX(const unsigned int dac_channel, const unsigned int dac_index)
+{
+	state->tracks.music.dac.SetFM6Overridden(true);
+	state->tracks.music.FM6().SetFM6Overridden(true);
+
+	Z80BusFMSafe::Lock(
+		[&](Z80BusFMSafe &z80_bus)
+		{
+			// Enable DAC.
+			z80_bus.WriteFMI(0x2B, 0x80);
+
+			// Force L/R panning.
+			z80_bus.WriteFMII(0xB6, 0xC0);
+
+			DACDriver::SendSampleRequest(z80_bus, dac_channel, dac_index);
+
+			// This is a DAC SFX: set to full volume
+			DACDriver::WriteVolumeAttenuation(z80_bus, dac_channel, 0);
 		}
 	);
 }
@@ -826,7 +807,7 @@ bool Track::CoordFlag(const unsigned int flag)
 			break;
 
 		case 0x19: // cfPlayDACSample
-			DACDriver::PlaySFX(0, *data_pointer++ - 1);
+			PlayDACSFX(0, *data_pointer++ - 1);
 			break;
 
 		case 0x1A: // cfPlaySound
@@ -1180,8 +1161,6 @@ void DACTrack::UpdateSample()
 	if (freq == 0x80)
 		return;
 
-	const auto &sample = DACDriver::GetSampleMetadata(freq - 0x81);
-
 	Z80BusFMSafe::Lock(
 		[&](Z80BusFMSafe &z80_bus)
 		{
@@ -1191,7 +1170,7 @@ void DACTrack::UpdateSample()
 				z80_bus.WriteFMII(0xB6, ams_fms_pan);
 			}
 
-			DACDriver::SendSampleRequest(z80_bus, 0, sample);
+			DACDriver::SendSampleRequest(z80_bus, 0, freq - 0x81);
 		}
 	);
 
@@ -1856,7 +1835,12 @@ static void ResetMusicRAM()
 	state->variables.queue = queue;
 
 	// Reset DAC volume.
-	DACDriver::WriteVolumeAttenuation(0, 0);
+	ClownMDSDK::MainCPU::Z80::Bus::LockInterruptSafe(
+		[&](ClownMDSDK::MainCPU::Z80::Bus &z80_bus)
+		{
+			DACDriver::WriteVolumeAttenuation(z80_bus, 0, 0);
+		}
+	);
 
 	// Reset music track RAM.
 	static constexpr auto channel_ids = std::to_array<ChannelID>({
@@ -2312,7 +2296,7 @@ static void Sound_PlaySpecial(const unsigned int id)
 
 static void Sound_PlayDAC(const unsigned int id)
 {
-	DACDriver::PlaySFX(1, id);
+	PlayDACSFX(1, id);
 }
 
 static void Sound_PlayCommand(const unsigned int id)
